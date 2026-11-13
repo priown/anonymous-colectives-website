@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Product | Anonymous Collectives</title>
+  <meta name="description" content="Anonymous Collectives product details. Choose your colour and size, then order on WhatsApp.">
+  <meta property="og:type" content="product">
+  <meta property="og:site_name" content="Anonymous Collectives">
+  <meta property="og:title" content="Product | Anonymous Collectives">
+  <meta property="og:description" content="Choose your colour and size, then order on WhatsApp.">
+  <meta property="og:image" content="assets/banners/hero-main.jpg">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#111111">
+  <link rel="icon" type="image/png" href="assets/logo/favicon.png">
+
+  <!-- Sets light/dark BEFORE first paint so there is no flash of the wrong theme -->
+  <script src="js/theme.js"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="js/tailwind-config.js"></script>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body data-page="product">
+  <a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[70] focus:bg-charcoal focus:px-4 focus:py-2 focus:text-ivory">Skip to content</a>
+  <div id="site-header-mount" class="h-16 lg:h-20"></div>
+
+  <main id="main">
+    <!-- Filled in by js/product.js from the ?id= in the link -->
+    <div id="product-root" class="mx-auto max-w-[90rem] px-5 pb-16 pt-6 lg:px-10 lg:pb-24 lg:pt-10"></div>
+
+    <section id="related-section" class="hidden border-t border-ink/10 bg-sand/60" aria-labelledby="related-title">
+      <div class="mx-auto max-w-[90rem] px-5 py-16 lg:px-10 lg:py-24">
+        <h2 id="related-title" class="font-serif text-4xl lg:text-5xl" data-reveal>You may also like</h2>
+        <div id="related-grid" class="rail mt-8 lg:mt-12"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="site-footer-mount"></div>
+
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <script src="js/products.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/cart.js"></script>
+  <script src="js/product.js"></script>
+</body>
+</html>

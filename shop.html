@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shop | Anonymous Collectives</title>
+  <meta name="description" content="Shop Anonymous Collectives: tees, tank tops, sleeveless tops, caps and beanies. Filter by category, colour and size, then order on WhatsApp.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Anonymous Collectives">
+  <meta property="og:title" content="Shop | Anonymous Collectives">
+  <meta property="og:description" content="Tees, tanks, caps and beanies. Order on WhatsApp.">
+  <meta property="og:image" content="assets/banners/hero-main.jpg">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#111111">
+  <link rel="icon" type="image/png" href="assets/logo/favicon.png">
+
+  <!-- Sets light/dark BEFORE first paint so there is no flash of the wrong theme -->
+  <script src="js/theme.js"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="js/tailwind-config.js"></script>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body data-page="shop">
+  <a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[70] focus:bg-charcoal focus:px-4 focus:py-2 focus:text-ivory">Skip to content</a>
+  <div id="site-header-mount" class="h-16 lg:h-20"></div>
+
+  <main id="main">
+
+    <!-- Page heading -->
+    <section class="mx-auto max-w-[90rem] px-5 pb-10 pt-14 lg:px-10 lg:pb-14 lg:pt-24">
+      <h1 class="wordmark enter text-[16vw] sm:text-[min(12vw,7rem)] lg:text-[min(9vw,9rem)]">Shop</h1>
+      <p class="enter enter-2 mt-6 max-w-xl font-serif text-2xl leading-snug lg:text-3xl">
+        Everything in the collection, from loud walls to quiet chests. Pick a piece, choose your size, and order on WhatsApp.
+      </p>
+    </section>
+
+    <!-- Category navigation -->
+    <nav class="border-y border-ink/10" aria-label="Product categories">
+      <div id="category-nav" class="no-scrollbar mx-auto flex max-w-[90rem] gap-2 overflow-x-auto px-5 py-4 lg:px-10"></div>
+    </nav>
+
+    <!-- Curated rows (hidden while a filter or search is active) -->
+    <div id="curated">
+      <section class="mx-auto max-w-[90rem] px-5 py-16 lg:px-10 lg:py-24" aria-labelledby="new-title">
+        <h2 id="new-title" class="font-serif text-4xl lg:text-5xl" data-reveal>New arrivals</h2>
+        <div id="shop-new" class="rail mt-8 lg:mt-12"></div>
+      </section>
+      <section class="border-t border-ink/10 bg-sand/60" aria-labelledby="best-title">
+        <div class="mx-auto max-w-[90rem] px-5 py-16 lg:px-10 lg:py-24">
+          <h2 id="best-title" class="font-serif text-4xl lg:text-5xl" data-reveal>Best sellers</h2>
+          <div id="shop-best" class="rail mt-8 lg:mt-12"></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- All products + filters -->
+    <section id="all-products" class="mx-auto max-w-[90rem] px-5 py-16 lg:px-10 lg:py-24" aria-labelledby="all-title">
+      <div class="flex flex-wrap items-end justify-between gap-4">
+        <h2 id="all-title" class="font-serif text-4xl lg:text-5xl">All products</h2>
+        <p id="result-count" class="text-sm text-ink/70" role="status" aria-live="polite"></p>
+      </div>
+
+      <!-- Search, sort and filter toggle -->
+      <div class="mt-8 grid gap-3 sm:grid-cols-[1fr_auto_auto]">
+        <div class="relative">
+          <label for="f-q" class="sr-only">Search products</label>
+          <input id="f-q" type="search" class="input pl-11" placeholder="Search products" autocomplete="off">
+          <i data-lucide="search" class="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/60"></i>
+        </div>
+        <div>
+          <label for="f-sort" class="sr-only">Sort products</label>
+          <select id="f-sort" class="select sm:min-w-[13rem]">
+            <option value="featured">Sort: Featured</option>
+            <option value="newest">Sort: Newest</option>
+            <option value="price-asc">Sort: Price, low to high</option>
+            <option value="price-desc">Sort: Price, high to low</option>
+          </select>
+        </div>
+        <button type="button" id="filters-toggle" class="btn btn-light lg:hidden" aria-expanded="false" aria-controls="filter-panel">
+          <i data-lucide="sliders-horizontal" class="h-4 w-4"></i> Filters <span id="filter-count"></span>
+        </button>
+      </div>
+
+      <!-- Filter panel -->
+      <div id="filter-panel" class="mt-3 hidden gap-3 sm:grid-cols-2 lg:grid lg:grid-cols-5">
+        <div><label for="f-gender" class="sr-only">Gender</label><select id="f-gender" class="select"></select></div>
+        <div><label for="f-colour" class="sr-only">Colour</label><select id="f-colour" class="select"></select></div>
+        <div><label for="f-size" class="sr-only">Size</label><select id="f-size" class="select"></select></div>
+        <div>
+          <label for="f-avail" class="sr-only">Availability</label>
+          <select id="f-avail" class="select">
+            <option value="">Availability: All</option>
+            <option value="in">In stock</option>
+            <option value="out">Sold out</option>
+          </select>
+        </div>
+        <button type="button" id="f-clear" class="btn btn-light">Clear all</button>
+        <div class="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-5">
+          <button type="button" class="chip" data-flag="new" aria-pressed="false">New arrivals</button>
+          <button type="button" class="chip" data-flag="best" aria-pressed="false">Best sellers</button>
+          <span id="collection-chip"></span>
+        </div>
+      </div>
+
+      <div id="product-grid" class="mt-10 grid grid-cols-2 items-start gap-x-4 gap-y-12 md:grid-cols-3 lg:grid-cols-4 lg:gap-x-6"></div>
+
+      <div id="empty-state" class="hidden py-20 text-center">
+        <p class="font-serif text-3xl">Nothing matches that yet.</p>
+        <p class="mt-3 text-ink/70">Try removing a filter or searching for something else.</p>
+        <button type="button" id="empty-clear" class="btn btn-dark mt-8">Clear filters</button>
+      </div>
+    </section>
+
+    <!-- Featured collections -->
+    <section id="collections" class="border-t border-ink/10 bg-sand/60" aria-labelledby="coll-title">
+      <div class="mx-auto max-w-[90rem] px-5 py-16 lg:px-10 lg:py-24">
+        <h2 id="coll-title" class="font-serif text-4xl lg:text-5xl" data-reveal>Featured collections</h2>
+        <p class="mt-4 max-w-xl text-ink/70" data-reveal>Pick a collection to see only what's in it.</p>
+        <div id="shop-collections" class="mt-10 grid gap-6 md:grid-cols-12"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <div id="site-footer-mount"></div>
+
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <script src="js/products.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/cart.js"></script>
+  <script src="js/shop.js"></script>
+</body>
+</html>

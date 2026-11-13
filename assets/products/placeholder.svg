@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1000" role="img" aria-label="Mockup coming soon">
+  <rect width="800" height="1000" fill="#A69A88"/>
+  <rect x="40" y="40" width="720" height="920" fill="none" stroke="#171715" stroke-opacity="0.45" stroke-width="2" stroke-dasharray="10 10"/>
+  <text x="400" y="480" text-anchor="middle" font-family="Georgia, serif" font-size="44" fill="#171715">Mockup coming soon</text>
+  <text x="400" y="530" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" fill="#171715" letter-spacing="2">REPLACEABLE PLACEHOLDER</text>
+</svg>

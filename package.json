@@ -1,0 +1,9 @@
+{
+  "name": "anonymous-collectives",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Anonymous Collectives static website (HTML, Tailwind CDN, vanilla JS). No dependencies are required to run it.",
+  "scripts": {
+    "start": "npx --yes serve . -l 8000"
+  }
+}

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Manage | Anonymous Collectives</title>
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#111111">
+  <link rel="icon" type="image/png" href="assets/logo/favicon.png">
+  <script src="js/theme.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="js/tailwind-config.js"></script>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body data-page="manage">
+  <div id="site-header-mount" class="h-16 lg:h-20"></div>
+
+  <main id="main" class="mx-auto max-w-5xl px-5 py-14 lg:py-20">
+    <h1 class="font-serif text-5xl lg:text-6xl">Manage the shop</h1>
+    <p class="mt-4 max-w-2xl text-ink/70">A private helper page (not linked from the website). It changes nothing by itself: it writes the text you paste into <code>js/products.js</code>, and checks your photos.</p>
+
+    <!-- PRICES -->
+    <section class="mt-16" aria-labelledby="prices-title">
+      <h2 id="prices-title" class="font-serif text-4xl">1. Prices</h2>
+      <ol class="mt-4 max-w-2xl list-decimal space-y-1 pl-5 text-ink/80">
+        <li>Type the <strong>old price</strong> (normal price) and the <strong>sale price</strong> for each product. Leave the sale price empty if it is not on sale.</li>
+        <li>Press <strong>Copy price list</strong>.</li>
+        <li>Open <code>js/products.js</code>, select everything from <code>const PRICE_LIST = {</code> to its closing <code>};</code>, paste, and save.</li>
+      </ol>
+      <div class="mt-8 overflow-x-auto">
+        <table class="w-full min-w-[34rem] text-left text-sm">
+          <thead><tr class="border-b border-ink/20"><th class="py-3 pr-3 font-semibold">Product</th><th class="py-3 pr-3 font-semibold">Old price (₦)</th><th class="py-3 pr-3 font-semibold">Sale price (₦)</th><th class="py-3 font-semibold">Customer sees</th></tr></thead>
+          <tbody id="price-rows"></tbody>
+        </table>
+      </div>
+      <div class="mt-6 flex flex-wrap items-center gap-3">
+        <button type="button" id="copy-prices" class="btn btn-dark">Copy price list</button>
+        <button type="button" id="reset-prices" class="btn btn-light">Reset to current</button>
+        <span id="copy-status" role="status" class="text-sm"></span>
+      </div>
+      <label for="price-output" class="mt-6 block text-sm font-medium">Text to paste into js/products.js</label>
+      <textarea id="price-output" rows="11" readonly class="input mt-2 font-mono text-xs"></textarea>
+    </section>
+
+    <!-- IMAGES -->
+    <section class="mt-20" aria-labelledby="img-title">
+      <h2 id="img-title" class="font-serif text-4xl">2. Product photos</h2>
+      <p class="mt-4 max-w-2xl text-ink/70">Every photo each product expects. Save a missing one in the folder shown, with exactly that file name, and refresh this page. Nothing else needs changing.</p>
+      <p id="img-summary" class="mt-4 text-sm font-medium"></p>
+      <div id="img-list" class="mt-6 space-y-8"></div>
+    </section>
+  </main>
+
+  <div id="site-footer-mount"></div>
+
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <script src="js/products.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/cart.js"></script>
+  <script src="js/manage.js"></script>
+</body>
+</html>

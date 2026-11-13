@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Anonymous Collectives | Stay Low. Stand Out.</title>
+  <meta name="description" content="Anonymous Collectives is a streetwear label built on quiet confidence. Shop tank tops, beanies and more, and order on WhatsApp.">
+  <meta name="color-scheme" content="light dark">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Anonymous Collectives">
+  <meta property="og:title" content="Anonymous Collectives | Stay Low. Stand Out.">
+  <meta property="og:description" content="A statement beyond the ordinary. Order via WhatsApp.">
+  <!-- After publishing, change this to the full URL, e.g. https://yourname.github.io/anonymous-collectives/assets/banners/hero-main.jpg -->
+  <meta property="og:image" content="assets/banners/hero-main.jpg">
+  <meta name="theme-color" content="#111111">
+  <link rel="icon" type="image/png" href="assets/logo/favicon.png">
+
+  <!-- Sets light/dark BEFORE first paint so there is no flash of the wrong theme -->
+  <script src="js/theme.js"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="js/tailwind-config.js"></script>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body data-page="home">
+  <a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[70] focus:bg-charcoal focus:px-4 focus:py-2 focus:text-ivory">Skip to content</a>
+  <div id="site-header-mount" class="h-16 lg:h-20"></div>
+
+  <main id="main">
+
+    <!-- 1. HERO BANNER (assets/banners/hero-main.jpg) -->
+    <section class="on-dark relative isolate flex min-h-[calc(100svh-4rem)] items-end overflow-hidden bg-charcoal text-ivory lg:min-h-[calc(100svh-5rem)] lg:items-center" aria-label="Campaign">
+      <img id="hero-img" class="banner-img object-[58%_30%] lg:object-[50%_30%]" src="assets/banners/hero-main.jpg" alt="" fetchpriority="high" onerror="acImgFallback(this)">
+      <!-- Plain dark overlays keep the text readable: from the bottom on phones, from the left on wider screens -->
+      <div class="absolute inset-0 bg-gradient-to-t from-charcoal/90 via-charcoal/35 to-charcoal/10 sm:hidden"></div>
+      <div class="absolute inset-0 hidden bg-gradient-to-r from-charcoal/85 via-charcoal/40 to-transparent sm:block"></div>
+      <div class="relative z-10 mx-auto w-full max-w-[90rem] px-5 pb-12 pt-24 lg:px-10 lg:pb-0 lg:pt-0">
+        <h1 class="wordmark enter text-[12.5vw] sm:text-[min(10vw,6rem)] lg:text-[min(6.6vw,7rem)]">Anonymous<br>Collectives</h1>
+        <p class="enter enter-2 mt-6 font-serif text-3xl italic sm:text-4xl lg:mt-8 lg:text-5xl">Stay Low. Stand Out.</p>
+        <p class="enter enter-2 mt-3 max-w-md text-base text-ivory/85 lg:text-lg">A statement beyond the ordinary.</p>
+        <div class="enter enter-3 mt-8 lg:mt-10">
+          <a href="shop.html" class="btn btn-ivory w-full sm:w-auto">Explore Collection</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. SHORT ABOUT US -->
+    <section class="border-b border-ink/10" aria-labelledby="about-short-title">
+      <div class="mx-auto grid max-w-[90rem] gap-8 px-5 py-20 lg:grid-cols-12 lg:gap-16 lg:px-10 lg:py-32">
+        <h2 id="about-short-title" class="font-serif text-4xl lg:col-span-3 lg:text-5xl" data-reveal>About Us</h2>
+        <div class="lg:col-span-8 lg:col-start-5" data-reveal>
+          <p class="font-serif text-3xl leading-snug sm:text-4xl lg:text-5xl">Anonymous Collectives is more than clothing. It is a statement of individuality, confidence and self-expression.</p>
+          <p class="mt-8 max-w-2xl text-lg leading-relaxed text-ink/75">Built around contemporary streetwear and understated identity, we create pieces that allow you to stand out without needing to speak. Stay low, stand out.</p>
+          <a href="about.html" class="btn btn-light mt-10">Our story</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. MARQUEE: moving brand text (CSS-only, seamless, no horizontal overflow) -->
+    <section class="marquee" aria-label="Anonymous Collectives, Stay low, stand out, Streetwear without limits">
+      <div class="marquee-track">
+        <div class="marquee-group" id="marquee-a"></div>
+        <div class="marquee-group" id="marquee-b" aria-hidden="true"></div>
+      </div>
+    </section>
+
+    <!-- 4. FEATURED COLLECTION (cards disappear on their own if a photo is missing) -->
+    <section class="mx-auto max-w-[90rem] px-5 py-20 lg:px-10 lg:py-28" aria-labelledby="feat-title">
+      <div class="flex flex-wrap items-end justify-between gap-6" data-reveal>
+        <div>
+          <h2 id="feat-title" class="font-serif text-4xl lg:text-6xl">Featured collection</h2>
+          <p class="mt-4 max-w-md text-ink/70">The pieces to start with. Pick a colour, pick a size, add it to your bag.</p>
+        </div>
+        <a href="shop.html" class="btn btn-light hidden sm:inline-flex">View All Collection</a>
+      </div>
+      <div id="featured-grid" class="mt-10 grid grid-cols-2 gap-x-4 gap-y-12 lg:mt-14 lg:gap-x-6 lg:[grid-template-columns:repeat(auto-fill,minmax(15rem,1fr))]"></div>
+      <div class="mt-10 sm:hidden"><a href="shop.html" class="btn btn-light w-full">View All Collection</a></div>
+    </section>
+
+    <!-- 5. SECOND CAMPAIGN BANNER (assets/banners/campaign-second.jpg) -->
+    <section class="on-dark relative isolate flex min-h-[78svh] items-end justify-center overflow-hidden bg-charcoal text-center text-ivory" aria-labelledby="beyond-title">
+      <img id="campaign-img" class="banner-img object-[70%_50%] lg:object-center" src="assets/banners/campaign-second.jpg" alt="" loading="lazy" onerror="acImgFallback(this)">
+      <div class="absolute inset-0 bg-gradient-to-t from-charcoal/90 via-charcoal/40 to-charcoal/10"></div>
+      <div class="relative z-10 mx-auto max-w-4xl px-5 pb-14 pt-32 lg:pb-20" data-reveal>
+        <h2 id="beyond-title" class="wordmark text-[11.5vw] sm:text-[min(9vw,6.5rem)]">Beyond the ordinary.</h2>
+        <p class="mt-5 font-serif text-3xl italic lg:text-4xl">Not made to blend in.</p>
+        <div class="mt-8"><a href="shop.html" class="btn btn-ghost-ivory">Explore the collection</a></div>
+      </div>
+    </section>
+
+    <!-- 6. SHOP BY CATEGORY -->
+    <section class="mx-auto max-w-[90rem] px-5 py-20 lg:px-10 lg:py-28" aria-labelledby="cat-title">
+      <div class="flex items-end justify-between gap-6" data-reveal>
+        <h2 id="cat-title" class="font-serif text-4xl lg:text-6xl">Shop by category</h2>
+        <a href="shop.html" class="link-line hidden pb-1 text-sm sm:inline-block">View all products</a>
+      </div>
+      <div id="category-grid" class="mt-10 grid grid-cols-2 gap-x-4 gap-y-10 md:grid-cols-3 lg:mt-14 lg:gap-x-6"></div>
+    </section>
+
+    <!-- 7. AC LOOKBOOK (restored from the previous version: editorial layout, click a photo to see the products) -->
+    <section id="lookbook" class="bg-sand/60 py-20 lg:py-28" aria-labelledby="look-title">
+      <div class="mx-auto max-w-[90rem] px-5 lg:px-10">
+        <div class="max-w-2xl" data-reveal>
+          <h2 id="look-title" class="font-serif text-4xl lg:text-6xl">AC Lookbook</h2>
+          <p class="mt-4 text-ink/70">Photographed in walls, hallways and quiet corners. Tap a photo to see what's being worn.</p>
+        </div>
+        <div id="lookbook-grid" class="mt-12 grid gap-x-6 gap-y-14 md:grid-cols-12 lg:mt-16"></div>
+      </div>
+    </section>
+
+    <!-- 8. STAY LOW, STAND OUT -->
+    <section class="on-dark bg-charcoal py-24 text-ivory lg:py-36" aria-labelledby="statement-title">
+      <div class="mx-auto max-w-[90rem] px-5 lg:px-10">
+        <h2 id="statement-title" class="wordmark text-[13vw] sm:text-[min(11vw,7rem)] lg:text-[min(9vw,10rem)]" data-reveal>Stay low.<br>Stand out.</h2>
+        <div class="mt-10 grid gap-8 lg:mt-16 lg:grid-cols-12" data-reveal>
+          <p class="max-w-xl font-serif text-2xl leading-snug lg:col-span-6 lg:col-start-7 lg:text-3xl">
+            You don't have to ask for attention to have it. This is confidence that stays quiet, and style that speaks for the person wearing it.
+          </p>
+          <div class="lg:col-span-6 lg:col-start-7"><a href="about.html" class="btn btn-ghost-ivory">Read our story</a></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 9. NEWSLETTER -->
+    <section id="newsletter" class="bg-sand" aria-labelledby="news-title">
+      <div class="mx-auto max-w-3xl px-5 py-20 text-center lg:py-28">
+        <h2 id="news-title" class="wordmark text-5xl lg:text-7xl" data-reveal>Stay in the loop.</h2>
+        <p class="mx-auto mt-6 max-w-lg text-ink/70" data-reveal>Be the first to discover new collections, exclusive releases and everything happening at Anonymous Collectives.</p>
+        <!-- Newsletter: see README "Newsletter" for how to connect an email service -->
+        <form data-newsletter class="mx-auto mt-10 max-w-xl" data-reveal>
+          <div class="flex flex-col gap-3 sm:flex-row">
+            <label for="nl-email" class="sr-only">Email address</label>
+            <input id="nl-email" type="email" name="email" autocomplete="email" placeholder="Your email address" class="input flex-1 bg-cream">
+            <button type="submit" class="btn btn-dark">Subscribe</button>
+          </div>
+          <p data-status role="status" class="mt-3 text-sm"></p>
+        </form>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Lookbook dialog -->
+  <dialog id="lookbook-dialog" class="lookbook" aria-labelledby="lb-title">
+    <div class="grid md:grid-cols-2">
+      <div class="img-frame aspect-[4/5] md:aspect-auto md:min-h-[34rem]"><img id="lb-img" src="" alt=""></div>
+      <div class="flex flex-col p-6 lg:p-10">
+        <div class="flex justify-end"><button type="button" id="lb-close" class="grid h-11 w-11 place-items-center" aria-label="Close"><i data-lucide="x" class="h-6 w-6"></i></button></div>
+        <h3 id="lb-title" class="font-serif text-4xl"></h3>
+        <p id="lb-text" class="mt-3 text-ink/70"></p>
+        <h4 class="mt-8 text-sm font-semibold">Worn in this shot</h4>
+        <ul id="lb-products" class="mt-2 divide-y divide-ink/10"></ul>
+        <a href="shop.html" class="btn btn-dark mt-8 w-full sm:w-auto">Browse the shop</a>
+      </div>
+    </div>
+  </dialog>
+
+  <div id="site-footer-mount"></div>
+
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <script src="js/products.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/cart.js"></script>
+  <script src="js/home.js"></script>
+</body>
+</html>
