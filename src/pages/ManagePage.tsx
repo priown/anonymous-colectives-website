@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type FormEvent,
+  type SetStateAction,
+} from 'react'
 import { Link } from 'react-router-dom'
 import {
   Download,
@@ -24,11 +31,14 @@ import {
 } from '../context/catalogue'
 import { usePageMeta } from '../hooks/usePageMeta'
 import {
-  isSupabaseConfigured,
   signInAdmin,
   signOutAdmin,
   watchAdminAuth,
 } from '../lib/supabase'
+import {
+  isCloudinaryConfigured,
+  uploadImageToCloudinary,
+} from '../lib/cloudinary'
 import { formatPrice } from '../lib/shop'
 import SmartImage from '../components/SmartImage'
 
@@ -50,6 +60,13 @@ const DEFAULT_CATEGORY_SELECTION = CATEGORIES.slice(0, 5).map(
 )
 const DEFAULT_BEST_SELLER_SELECTION = BASE_PRODUCTS.filter(
   (product) => product.isBestSeller,
+).map((product) => product.id)
+const DEFAULT_TOP_RECOMMENDED_SELECTION = BASE_PRODUCTS.filter(
+  (product) => product.isFeatured,
+).map((product) => product.id)
+const DEFAULT_FEATURED_PRODUCT_SELECTION = DEFAULT_TOP_RECOMMENDED_SELECTION
+const DEFAULT_NEW_ARRIVAL_SELECTION = BASE_PRODUCTS.filter(
+  (product) => product.isNewArrival,
 ).map((product) => product.id)
 
 const buildRows = (products: Product[]): PriceRow[] =>
@@ -99,64 +116,6 @@ function AdminPhoto({ src }: { src: string }) {
         <span className="badge badge-out absolute right-2 top-2">Missing file</span>
       ) : null}
     </div>
-  )
-}
-
-function SetupScreen() {
-  return (
-    <main id="main" className="mx-auto flex max-w-2xl flex-col px-5 py-20 lg:py-28">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ink/60">
-        One-time setup
-      </p>
-      <h1 className="mt-3 font-serif text-5xl lg:text-6xl">Connect Supabase</h1>
-      <p className="mt-4 text-ink/70">
-        The admin backend is not connected yet. Supabase provides the permanent
-        username/password login, shared shop data and image storage. No GitHub
-        token is needed after this setup.
-      </p>
-
-      <ol className="mt-8 list-decimal space-y-5 pl-5 text-ink/80">
-        <li>
-          Create a free project at{' '}
-          <a
-            href="https://supabase.com/dashboard"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="link-line text-ink"
-          >
-            supabase.com/dashboard
-          </a>
-          .
-        </li>
-        <li>
-          Open the SQL Editor and run <code>supabase/setup.sql</code> from this
-          repository.
-        </li>
-        <li>
-          In Authentication → Users, add{' '}
-          <code>admin@anonymous-collectives.local</code> with password{' '}
-          <code>Admin</code> and confirm the user.
-        </li>
-        <li>
-          In Project Settings → API, copy the Project URL and the public{' '}
-          <strong>anon</strong> key.
-        </li>
-        <li>
-          Add them as <code>VITE_SUPABASE_URL</code> and{' '}
-          <code>VITE_SUPABASE_ANON_KEY</code> in{' '}
-          <code>.env.local</code> for local development and in the GitHub
-          repository Actions variables for deployment. Then redeploy.
-        </li>
-      </ol>
-
-      <p className="mt-8 text-sm text-ink/60">
-        The full checklist is in the README under “Admin access”.
-      </p>
-
-      <Link to="/" className="btn btn-light mt-10 self-start">
-        Back to the shop
-      </Link>
-    </main>
   )
 }
 
@@ -247,6 +206,9 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     overrides,
     featuredCollections,
     bestSellers,
+    topRecommended,
+    featuredProducts,
+    newArrivals,
     featuredCategories,
     publishState,
     savePrices,
@@ -269,6 +231,15 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   )
   const [selectedBestSellers, setSelectedBestSellers] = useState<string[]>(
     bestSellers,
+  )
+  const [selectedTopRecommended, setSelectedTopRecommended] = useState<string[]>(
+    topRecommended,
+  )
+  const [selectedFeaturedProducts, setSelectedFeaturedProducts] = useState<string[]>(
+    featuredProducts,
+  )
+  const [selectedNewArrivals, setSelectedNewArrivals] = useState<string[]>(
+    newArrivals,
   )
   const [selectedCategories, setSelectedCategories] = useState<string[]>(
     featuredCategories,
@@ -416,6 +387,20 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     })
   }
 
+  const toggleProductGroup = (
+    id: string,
+    setGroup: Dispatch<SetStateAction<string[]>>,
+  ) => {
+    setSelectionNotice(EMPTY_NOTICE)
+    setGroup((current) =>
+      current.includes(id)
+        ? current.filter((item) => item !== id)
+        : current.length >= 8
+          ? current
+          : [...current, id],
+    )
+  }
+
   const saveSelectionChanges = () => {
     if (!selectedCollections.length) {
       setSelectionNotice({
@@ -442,6 +427,9 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     const selections: HomepageSelections = {
       featuredCollections: selectedCollections,
       bestSellers: selectedBestSellers,
+      topRecommended: selectedTopRecommended,
+      featuredProducts: selectedFeaturedProducts,
+      newArrivals: selectedNewArrivals,
       featuredCategories: selectedCategories,
     }
 
@@ -463,10 +451,16 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     setSelectedCollections(DEFAULT_COLLECTION_SELECTION)
     setSelectedCategories(DEFAULT_CATEGORY_SELECTION)
     setSelectedBestSellers(DEFAULT_BEST_SELLER_SELECTION)
+    setSelectedTopRecommended(DEFAULT_TOP_RECOMMENDED_SELECTION)
+    setSelectedFeaturedProducts(DEFAULT_FEATURED_PRODUCT_SELECTION)
+    setSelectedNewArrivals(DEFAULT_NEW_ARRIVAL_SELECTION)
     if (
       saveSelections({
         featuredCollections: DEFAULT_COLLECTION_SELECTION,
         bestSellers: DEFAULT_BEST_SELLER_SELECTION,
+        topRecommended: DEFAULT_TOP_RECOMMENDED_SELECTION,
+        featuredProducts: DEFAULT_FEATURED_PRODUCT_SELECTION,
+        newArrivals: DEFAULT_NEW_ARRIVAL_SELECTION,
         featuredCategories: DEFAULT_CATEGORY_SELECTION,
       })
     ) {
@@ -480,7 +474,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const addFiles = async (product: Product, files: FileList | null) => {
     if (!files || !files.length) return
     setBusyId(product.id)
-    setImageNotice(product.id, 'Processing photos...', 'msg-info')
+    setImageNotice(product.id, 'Processing photos for Cloudinary...', 'msg-info')
 
     const accepted: string[] = []
     for (const file of Array.from(files)) {
@@ -498,13 +492,45 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
       return
     }
 
-    const ok = setProductImages(product.id, [...product.images, ...accepted])
+    if (!isCloudinaryConfigured) {
+      setImageNotice(
+        product.id,
+        'Cloudinary is not configured. Add VITE_CLOUDINARY_CLOUD_NAME and VITE_CLOUDINARY_UPLOAD_PRESET to the deployment variables.',
+        'msg-err',
+      )
+      setBusyId(null)
+      return
+    }
+
+    const uploaded: string[] = []
+    let failed = 0
+    for (const image of accepted) {
+      try {
+        uploaded.push(await uploadImageToCloudinary(image))
+      } catch {
+        failed += 1
+      }
+    }
+
+    if (!uploaded.length) {
+      setImageNotice(
+        product.id,
+        'Cloudinary rejected the upload. Check the unsigned upload preset.',
+        'msg-err',
+      )
+      setBusyId(null)
+      return
+    }
+
+    const ok = setProductImages(product.id, [...product.images, ...uploaded])
     setImageNotice(
       product.id,
       ok
-        ? `${accepted.length} photo${
-            accepted.length === 1 ? '' : 's'
-          } added. Publishing to the live site...`
+        ? `${uploaded.length} photo${
+            uploaded.length === 1 ? '' : 's'
+          } uploaded to Cloudinary and added${
+            failed ? ` (${failed} failed)` : ''
+          }. Publishing to the live site...`
         : 'Could not save these photos. Browser storage may be full.',
       ok ? 'msg-ok' : 'msg-err',
     )
@@ -935,6 +961,67 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
           </div>
         </div>
 
+        <div className="mt-6 border border-ink/15 p-5">
+          <h3 className="font-serif text-2xl">Product labels</h3>
+          <p className="mt-1 text-xs text-ink/60">
+            Assign products to additional merchandising groups. Each group can
+            contain up to eight products and a product may belong to multiple groups.
+          </p>
+          <div className="mt-4 grid gap-5 lg:grid-cols-3">
+            {[
+              {
+                title: 'Top recommended',
+                values: selectedTopRecommended,
+                setter: setSelectedTopRecommended,
+              },
+              {
+                title: 'Featured products',
+                values: selectedFeaturedProducts,
+                setter: setSelectedFeaturedProducts,
+              },
+              {
+                title: 'New arrivals',
+                values: selectedNewArrivals,
+                setter: setSelectedNewArrivals,
+              },
+            ].map((group) => (
+              <div key={group.title}>
+                <div className="flex items-baseline justify-between gap-2">
+                  <h4 className="text-sm font-semibold uppercase tracking-[0.12em]">
+                    {group.title}
+                  </h4>
+                  <span className="text-xs text-ink/60">
+                    {group.values.length}/8
+                  </span>
+                </div>
+                <div className="mt-2 space-y-2">
+                  {products.map((product) => {
+                    const checked = group.values.includes(product.id)
+                    const disabled = !checked && group.values.length >= 8
+                    return (
+                      <label
+                        key={`${group.title}-${product.id}`}
+                        className={`flex items-center gap-2 border p-2 text-sm ${
+                          checked ? 'border-ink bg-ink/5' : 'border-ink/15'
+                        } ${disabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'}`.trim()}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={disabled}
+                          onChange={() => toggleProductGroup(product.id, group.setter)}
+                          className="h-4 w-4 accent-[#A83232]"
+                        />
+                        <span className="truncate">{product.name}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <button
             type="button"
@@ -1139,7 +1226,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
 
 export default function ManagePage() {
   const [signedIn, setSignedIn] = useState(false)
-  const [authReady, setAuthReady] = useState(!isSupabaseConfigured)
+  const [authReady, setAuthReady] = useState(false)
 
   usePageMeta({
     title: 'Admin | Anonymous Collectives',
@@ -1166,8 +1253,6 @@ export default function ManagePage() {
       unsubscribe()
     }
   }, [])
-
-  if (!isSupabaseConfigured) return <SetupScreen />
 
   if (!authReady) {
     return (

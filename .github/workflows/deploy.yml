@@ -41,6 +41,8 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
           VITE_ADMIN_USERNAME: ${{ vars.VITE_ADMIN_USERNAME }}
           VITE_ADMIN_EMAIL: ${{ vars.VITE_ADMIN_EMAIL }}
+          VITE_CLOUDINARY_CLOUD_NAME: ${{ vars.VITE_CLOUDINARY_CLOUD_NAME }}
+          VITE_CLOUDINARY_UPLOAD_PRESET: ${{ vars.VITE_CLOUDINARY_UPLOAD_PRESET }}
 
       - name: Add SPA fallback
         run: cp dist/index.html dist/404.html

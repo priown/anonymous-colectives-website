@@ -33,6 +33,13 @@ const DEFAULT_FEATURED_COLLECTIONS = COLLECTIONS.map((collection) => collection.
 const DEFAULT_BEST_SELLERS = BASE_PRODUCTS.filter(
   (product) => product.isBestSeller,
 ).map((product) => product.id)
+const DEFAULT_TOP_RECOMMENDED = BASE_PRODUCTS.filter(
+  (product) => product.isFeatured,
+).map((product) => product.id)
+const DEFAULT_FEATURED_PRODUCTS = DEFAULT_TOP_RECOMMENDED
+const DEFAULT_NEW_ARRIVALS = BASE_PRODUCTS.filter(
+  (product) => product.isNewArrival,
+).map((product) => product.id)
 const DEFAULT_FEATURED_CATEGORIES = CATEGORIES.slice(0, 5).map(
   (category) => category.name,
 )
@@ -42,6 +49,9 @@ const DEFAULTS: CatalogueOverrides = {
   images: {},
   featuredCollections: DEFAULT_FEATURED_COLLECTIONS,
   bestSellers: DEFAULT_BEST_SELLERS,
+  topRecommended: DEFAULT_TOP_RECOMMENDED,
+  featuredProducts: DEFAULT_FEATURED_PRODUCTS,
+  newArrivals: DEFAULT_NEW_ARRIVALS,
   featuredCategories: DEFAULT_FEATURED_CATEGORIES,
 }
 
@@ -89,6 +99,15 @@ const normalizeOverrides = (
   const storedBestSellers = uniqueStrings(raw.bestSellers).filter((id) =>
     productIds.has(id),
   )
+  const storedTopRecommended = uniqueStrings(raw.topRecommended).filter((id) =>
+    productIds.has(id),
+  )
+  const storedFeaturedProducts = uniqueStrings(raw.featuredProducts).filter((id) =>
+    productIds.has(id),
+  )
+  const storedNewArrivals = uniqueStrings(raw.newArrivals).filter((id) =>
+    productIds.has(id),
+  )
   const storedCategories = uniqueStrings(raw.featuredCategories)
     .filter((name) => categoryNames.has(name))
     .slice(0, 5)
@@ -103,6 +122,15 @@ const normalizeOverrides = (
     bestSellers: Array.isArray(raw.bestSellers)
       ? storedBestSellers
       : DEFAULT_BEST_SELLERS,
+    topRecommended: Array.isArray(raw.topRecommended)
+      ? storedTopRecommended
+      : DEFAULT_TOP_RECOMMENDED,
+    featuredProducts: Array.isArray(raw.featuredProducts)
+      ? storedFeaturedProducts
+      : DEFAULT_FEATURED_PRODUCTS,
+    newArrivals: Array.isArray(raw.newArrivals)
+      ? storedNewArrivals
+      : DEFAULT_NEW_ARRIVALS,
     featuredCategories:
       Array.isArray(raw.featuredCategories) && storedCategories.length === 5
         ? storedCategories
@@ -138,6 +166,9 @@ const applyOverrides = (overrides: CatalogueOverrides): Product[] =>
       discountPrice: discount,
       images: images && images.length ? images : product.images,
       isBestSeller: overrides.bestSellers.includes(product.id),
+      isFeatured: overrides.featuredProducts.includes(product.id),
+      isNewArrival: overrides.newArrivals.includes(product.id),
+      isTopRecommended: overrides.topRecommended.includes(product.id),
     }
   })
 
@@ -347,6 +378,9 @@ export function CatalogueProvider({ children }: { children: ReactNode }) {
     overrides,
     featuredCollections: overrides.featuredCollections,
     bestSellers: overrides.bestSellers,
+    topRecommended: overrides.topRecommended,
+    featuredProducts: overrides.featuredProducts,
+    newArrivals: overrides.newArrivals,
     featuredCategories: overrides.featuredCategories,
     publishState,
     savePrices,

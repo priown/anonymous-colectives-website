@@ -6,6 +6,9 @@ export type PriceOverride = { old: number; sale: number | null }
 export type HomepageSelections = {
   featuredCollections: string[]
   bestSellers: string[]
+  topRecommended: string[]
+  featuredProducts: string[]
+  newArrivals: string[]
   featuredCategories: string[]
 }
 
@@ -26,6 +29,9 @@ export type CatalogueContextValue = {
   overrides: CatalogueOverrides
   featuredCollections: string[]
   bestSellers: string[]
+  topRecommended: string[]
+  featuredProducts: string[]
+  newArrivals: string[]
   featuredCategories: string[]
   publishState: PublishState
   savePrices: (prices: Record<string, PriceOverride>) => boolean

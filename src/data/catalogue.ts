@@ -28,6 +28,7 @@ export type ProductSeed = {
   isNewArrival: boolean
   isBestSeller: boolean
   isFeatured: boolean
+  isTopRecommended?: boolean
   collection: string
   dateAdded: string
 }

@@ -61,6 +61,25 @@ export const signInAdmin = async (
         : error.message,
     )
   }
+
+  await syncAdminProfile(username)
+}
+
+/** Create or refresh the admin's profile row in the public `users` table. */
+const syncAdminProfile = async (username: string): Promise<void> => {
+  if (!supabase) return
+  const { data } = await supabase.auth.getUser()
+  const id = data.user?.id
+  if (!id) return
+  await supabase.from('users').upsert(
+    {
+      id,
+      username,
+      role: 'admin',
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'id' },
+  )
 }
 
 export const signOutAdmin = async (): Promise<void> => {
