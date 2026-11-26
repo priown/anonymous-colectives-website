@@ -28,6 +28,7 @@ import {
   CATEGORIES,
   COLLECTIONS,
   PRODUCTS as BASE_PRODUCTS,
+  type Colour,
   type Product,
 } from '../data/catalogue'
 import { useCatalogue, type HomepageSelections } from '../context/catalogue'
@@ -65,6 +66,9 @@ const DEFAULT_NEW_ARRIVAL_SELECTION = BASE_PRODUCTS.filter(
 ).map((product) => product.id)
 
 const today = () => new Date().toISOString().slice(0, 10)
+
+const normalizeHex = (value: string) =>
+  /^#[0-9a-f]{6}$/i.test(value) ? value : '#161616'
 
 const compressImage = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -387,9 +391,43 @@ function ProductEditor({ product, mode, onClose, onSave }: ProductEditorProps) {
       })
       return
     }
+    setDraft((current) => {
+      const removed = current.images[index]
+      return {
+        ...current,
+        images: current.images.filter((_, imageIndex) => imageIndex !== index),
+        colours: current.colours.map((colour) =>
+          colour.image === removed ? { ...colour, image: undefined } : colour,
+        ),
+      }
+    })
+    setNotice(EMPTY_NOTICE)
+  }
+
+  const updateColour = (index: number, patch: Partial<Colour>) => {
     setDraft((current) => ({
       ...current,
-      images: current.images.filter((_, imageIndex) => imageIndex !== index),
+      colours: current.colours.map((colour, colourIndex) =>
+        colourIndex === index ? { ...colour, ...patch } : colour,
+      ),
+    }))
+    setNotice(EMPTY_NOTICE)
+  }
+
+  const addColour = () => {
+    setDraft((current) => ({
+      ...current,
+      colours: [...current.colours, { name: '', hex: '#161616' }],
+    }))
+    setNotice(EMPTY_NOTICE)
+  }
+
+  const removeColour = (index: number) => {
+    setDraft((current) => ({
+      ...current,
+      colours: current.colours.filter(
+        (_, colourIndex) => colourIndex !== index,
+      ),
     }))
     setNotice(EMPTY_NOTICE)
   }
@@ -443,6 +481,28 @@ function ProductEditor({ product, mode, onClose, onSave }: ProductEditorProps) {
       return
     }
 
+    const preparedColours = draft.colours
+      .map((colour) => ({
+        ...colour,
+        name: colour.name.trim(),
+        hex: normalizeHex(colour.hex),
+        image: colour.image || undefined,
+      }))
+      .filter((colour) => colour.name)
+
+    const colourNames = new Set<string>()
+    for (const colour of preparedColours) {
+      const key = colour.name.toLowerCase()
+      if (colourNames.has(key)) {
+        setNotice({
+          text: `Colour names must be unique — “${colour.name}” appears twice.`,
+          kind: 'msg-err',
+        })
+        return
+      }
+      colourNames.add(key)
+    }
+
     const prepared: Product = {
       ...draft,
       name: draft.name.trim(),
@@ -453,6 +513,7 @@ function ProductEditor({ product, mode, onClose, onSave }: ProductEditorProps) {
         .split(',')
         .map((size) => size.trim())
         .filter(Boolean),
+      colours: preparedColours,
       originalPrice: Math.round(nextPrice),
       discountPrice: nextSale === null ? null : Math.round(nextSale),
       quantity: Math.max(0, Math.round(nextStock)),
@@ -828,6 +889,115 @@ function ProductEditor({ product, mode, onClose, onSave }: ProductEditorProps) {
                   }}
                 />
               </div>
+            </section>
+
+            <section aria-labelledby="editor-colours-title">
+              <div className="flex items-baseline justify-between gap-3">
+                <h3
+                  id="editor-colours-title"
+                  className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/60"
+                >
+                  Colours
+                </h3>
+                <span className="text-xs text-ink/60">
+                  {draft.colours.length} colour
+                  {draft.colours.length === 1 ? '' : 's'}
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-ink/60">
+                Add the colour options customers can choose. Link a photo when a
+                colour is shown in a specific picture.
+              </p>
+
+              {draft.colours.length ? (
+                <div className="mt-3 space-y-2">
+                  {draft.colours.map((colour, index) => {
+                    const label = colour.name || `colour ${index + 1}`
+                    return (
+                      <div
+                        key={index}
+                        className="grid gap-2 border border-ink/15 p-3 sm:grid-cols-[minmax(0,1fr)_7rem_11rem_auto] sm:items-end"
+                      >
+                        <label className="min-w-0">
+                          <span className="mb-1 block text-xs font-medium text-ink/70">
+                            Colour name
+                          </span>
+                          <input
+                            name={`colour-name-${index}`}
+                            autoComplete="off"
+                            className="input"
+                            value={colour.name}
+                            onChange={(event) =>
+                              updateColour(index, { name: event.target.value })
+                            }
+                            placeholder="e.g. Black"
+                          />
+                        </label>
+                        <label>
+                          <span className="mb-1 block text-xs font-medium text-ink/70">
+                            Swatch
+                          </span>
+                          <input
+                            type="color"
+                            name={`colour-hex-${index}`}
+                            className="color-input"
+                            value={normalizeHex(colour.hex)}
+                            onChange={(event) =>
+                              updateColour(index, { hex: event.target.value })
+                            }
+                            aria-label={`Swatch colour for ${label}`}
+                          />
+                        </label>
+                        <label className="min-w-0">
+                          <span className="mb-1 block text-xs font-medium text-ink/70">
+                            Photo (optional)
+                          </span>
+                          <select
+                            name={`colour-photo-${index}`}
+                            className="select"
+                            value={colour.image ?? ''}
+                            onChange={(event) =>
+                              updateColour(index, {
+                                image: event.target.value || undefined,
+                              })
+                            }
+                          >
+                            <option value="">No photo</option>
+                            {draft.images.map((src, imageIndex) => (
+                              <option
+                                key={`${src.slice(0, 40)}-${imageIndex}`}
+                                value={src}
+                              >
+                                Photo {imageIndex + 1}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => removeColour(index)}
+                          className="grid h-12 w-10 place-items-center justify-self-end border border-ink/15 text-ink/60 transition-colors hover:border-choc hover:bg-choc hover:text-white"
+                          aria-label={`Remove ${label}`}
+                        >
+                          <Trash2 className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <p className="mt-3 border border-dashed border-ink/25 p-4 text-sm text-ink/60">
+                  No colours yet. Add one if customers should choose a shade.
+                </p>
+              )}
+
+              <button
+                type="button"
+                className="btn btn-light mt-3"
+                onClick={addColour}
+              >
+                <Plus className="h-4 w-4" aria-hidden="true" /> Add colour
+              </button>
             </section>
 
           </div>

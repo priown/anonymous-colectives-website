@@ -1,3 +1,4 @@
+import { Analytics } from '@vercel/analytics/react'
 import { BrowserRouter, Navigate, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
 import Layout from './components/Layout'
 import { CartProvider } from './context/CartContext'
@@ -25,25 +26,28 @@ function LegacyProductRedirect() {
 
 export default function App() {
   return (
-    <BrowserRouter basename={import.meta.env.BASE_URL}>
-      <ThemeProvider>
-        <CatalogueProvider>
-          <CartProvider>
-            <Routes>
-              <Route element={<Layout />}>
-                <Route index element={<HomePage />} />
-                <Route path="shop" element={<ShopPage />} />
-                <Route path="product" element={<LegacyProductRedirect />} />
-                <Route path="product/:id" element={<ProductRoute />} />
-                <Route path="about" element={<AboutPage />} />
-                <Route path="contact" element={<ContactPage />} />
-                <Route path="manage" element={<ManagePage />} />
-                <Route path="*" element={<NotFoundPage />} />
-              </Route>
-            </Routes>
-          </CartProvider>
-        </CatalogueProvider>
-      </ThemeProvider>
-    </BrowserRouter>
+    <>
+      <BrowserRouter basename={import.meta.env.BASE_URL}>
+        <ThemeProvider>
+          <CatalogueProvider>
+            <CartProvider>
+              <Routes>
+                <Route element={<Layout />}>
+                  <Route index element={<HomePage />} />
+                  <Route path="shop" element={<ShopPage />} />
+                  <Route path="product" element={<LegacyProductRedirect />} />
+                  <Route path="product/:id" element={<ProductRoute />} />
+                  <Route path="about" element={<AboutPage />} />
+                  <Route path="contact" element={<ContactPage />} />
+                  <Route path="manage" element={<ManagePage />} />
+                  <Route path="*" element={<NotFoundPage />} />
+                </Route>
+              </Routes>
+            </CartProvider>
+          </CatalogueProvider>
+        </ThemeProvider>
+      </BrowserRouter>
+      <Analytics />
+    </>
   )
 }

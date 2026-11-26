@@ -463,6 +463,18 @@ body {
   background: var(--cream);
   color: var(--ink);
 }
+.color-input {
+  width: 100%;
+  min-height: 3rem;
+  padding: 0.3rem;
+  background: transparent;
+  border: 1px solid rgb(var(--c-text) / 0.35);
+  cursor: pointer;
+  transition: border-color 0.25s;
+}
+.color-input:hover {
+  border-color: var(--ink);
+}
 
 /* Horizontal scroll rail (mobile new arrivals) */
 .rail {
