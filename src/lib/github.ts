@@ -10,7 +10,7 @@ import type { CatalogueOverrides } from '../context/catalogue'
  */
 export const GITHUB = {
   owner: import.meta.env.VITE_GITHUB_OWNER || 'priown',
-  repo: import.meta.env.VITE_GITHUB_REPO || 'anonymous-colectives-website',
+  repo: import.meta.env.VITE_GITHUB_REPO || 'anonymous-collectives-website',
   branch: import.meta.env.VITE_GITHUB_BRANCH || 'main',
   dataPath: 'public/data/store.json',
   imageDir: 'public/assets/admin',

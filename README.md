@@ -60,7 +60,7 @@ The private admin page is at **`/manage`** (not linked in the navigation).
 
 Create the token at
 [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new),
-choose only the `anonymous-colectives-website` repository, and give it
+choose only the `anonymous-collectives-website` repository, and give it
 **Contents: Read and write**. Paste it into the admin login. It is kept in
 `sessionStorage` for that browser tab only.
 
