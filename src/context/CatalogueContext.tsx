@@ -185,8 +185,7 @@ export function CatalogueProvider({ children }: { children: ReactNode }) {
       ? { status: 'idle', message: 'Connected to the live storefront.' }
       : {
           status: 'local',
-          message:
-            'Admin backend not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (see README).',
+          message: 'Changes will be saved for this browser only.',
         },
   )
   const overridesRef = useRef(overrides)
@@ -274,8 +273,7 @@ export function CatalogueProvider({ children }: { children: ReactNode }) {
         if (revision === revisionRef.current) {
           setPublishState({
             status: 'local',
-            message:
-              'Saved in this browser only. Connect Supabase to publish to every visitor.',
+            message: 'Saved in this browser only.',
           })
         }
         return false
@@ -311,7 +309,7 @@ export function CatalogueProvider({ children }: { children: ReactNode }) {
             message:
               error instanceof Error
                 ? error.message
-                : 'Could not publish changes to Supabase.',
+                : 'Could not publish changes.',
           })
         }
         return false
@@ -363,7 +361,7 @@ export function CatalogueProvider({ children }: { children: ReactNode }) {
       if (!isSupabaseConfigured) {
         setPublishState({
           status: 'local',
-          message: 'Connect Supabase to save products for every visitor.',
+          message: 'Could not save products right now.',
         })
         return false
       }
@@ -383,7 +381,7 @@ export function CatalogueProvider({ children }: { children: ReactNode }) {
           message:
             error instanceof Error
               ? error.message
-              : 'Could not save products to Supabase.',
+              : 'Could not save products.',
         })
         return false
       }

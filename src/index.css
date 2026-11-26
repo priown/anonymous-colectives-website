@@ -780,3 +780,40 @@ body.no-scroll {
   opacity: 1;
   transform: translate(-50%, 0);
 }
+
+/* ---- Admin dashboard ------------------------------------------------------ */
+.admin-panel-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  justify-content: flex-end;
+  background: rgb(8 8 8 / 0.58);
+  overscroll-behavior: contain;
+}
+.admin-panel {
+  width: min(42rem, 100vw);
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--cream);
+  color: var(--ink);
+  border-left: 1px solid var(--line);
+  box-shadow: -20px 0 60px rgb(8 8 8 / 0.25);
+  animation: admin-panel-in 0.35s var(--ease) both;
+}
+@keyframes admin-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(2rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (max-width: 640px) {
+  .admin-panel {
+    border-left: 0;
+  }
+}

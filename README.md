@@ -94,17 +94,16 @@ consider rate-limiting login attempts.
 
 Once signed in, admin can:
 
-- Edit every product's old and sale price and save them live across the shop,
-  product pages and cart.
+- Add new products and edit or delete existing ones.
+- Update names, descriptions, stories, categories, collections, sizes, regular
+  and sale prices, stock, and availability.
+- Upload product photos from the device, remove photos, and choose the cover
+  photo.
 - Choose the five **Featured categories** shown directly below the homepage hero.
 - Choose **3–5 Featured collections** for the shop's collection row.
 - Choose up to 8 **Best-selling products** for the shop row. The first four
   selected fill the homepage Best Selling row.
-- Upload extra product photos from the device, add photos by file path/URL,
-  remove photos and choose the cover photo.
-- Reset prices, photos, selections or all admin changes, and download a JSON
-  backup.
-- Copy a generated `PRICE_LIST` to paste into `src/data/catalogue.ts`.
+- Reset the homepage selections to the defaults.
 
 Every admin save is stored in Supabase:
 
@@ -138,7 +137,7 @@ controlled there too and appear on the shop page.
 
 The current seed prices, photos and homepage selections are in
 **`public/data/store.json`**. Once Supabase is connected, the live copy is the
-`storefront` row in Supabase, and admin uploads live in Supabase Storage.
+`storefront` row in Supabase, and admin uploads go to Cloudinary.
 
 Product photos live in **`public/assets/products/`**, model photos in
 `public/assets/models/`, banners in `public/assets/banners/` and logos in

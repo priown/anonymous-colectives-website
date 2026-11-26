@@ -1,6 +1,8 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type Dispatch,
   type FormEvent,
@@ -8,16 +10,19 @@ import {
 } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Download,
-  ImagePlus,
   Loader2,
   LogIn,
   LogOut,
+  Package,
+  Pencil,
+  Plus,
   RefreshCw,
   Save,
+  Search,
   Star,
   Trash2,
   Upload,
+  X,
 } from 'lucide-react'
 import {
   CATEGORIES,
@@ -25,17 +30,9 @@ import {
   PRODUCTS as BASE_PRODUCTS,
   type Product,
 } from '../data/catalogue'
-import {
-  useCatalogue,
-  type HomepageSelections,
-  type PriceOverride,
-} from '../context/catalogue'
+import { useCatalogue, type HomepageSelections } from '../context/catalogue'
 import { usePageMeta } from '../hooks/usePageMeta'
-import {
-  signInAdmin,
-  signOutAdmin,
-  watchAdminAuth,
-} from '../lib/supabase'
+import { signInAdmin, signOutAdmin, watchAdminAuth } from '../lib/supabase'
 import {
   isCloudinaryConfigured,
   uploadImageToCloudinary,
@@ -43,17 +40,14 @@ import {
 import { formatPrice } from '../lib/shop'
 import SmartImage from '../components/SmartImage'
 
-type PriceRow = {
-  id: string
-  old: string
-  sale: string
-}
-
-type Notice = { text: string; kind: string }
+type NoticeKind = '' | 'msg-ok' | 'msg-err' | 'msg-info'
+type Notice = { text: string; kind: NoticeKind }
+type EditorMode = 'create' | 'edit'
 
 const EMPTY_NOTICE: Notice = { text: '', kind: '' }
 const MAX_IMAGE_EDGE = 1600
-const STORAGE_WARNING_BYTES = 4 * 1024 * 1024
+const PAGE_SIZE = 25
+const GENDERS = ['Women', 'Men', 'Unisex']
 
 const DEFAULT_COLLECTION_SELECTION = COLLECTIONS.map((collection) => collection.name)
 const DEFAULT_CATEGORY_SELECTION = CATEGORIES.slice(0, 5).map(
@@ -70,12 +64,7 @@ const DEFAULT_NEW_ARRIVAL_SELECTION = BASE_PRODUCTS.filter(
   (product) => product.isNewArrival,
 ).map((product) => product.id)
 
-const buildRows = (products: Product[]): PriceRow[] =>
-  products.map((product) => ({
-    id: product.id,
-    old: product.originalPrice ? String(product.originalPrice) : '',
-    sale: product.discountPrice ? String(product.discountPrice) : '',
-  }))
+const today = () => new Date().toISOString().slice(0, 10)
 
 const compressImage = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -107,15 +96,67 @@ const compressImage = (file: File): Promise<string> =>
     reader.readAsDataURL(file)
   })
 
-function AdminPhoto({ src }: { src: string }) {
-  const [missing, setMissing] = useState(false)
+const nextProductId = (products: Product[]) => {
+  const used = new Set(products.map((product) => product.id))
+  const highest = products.reduce((max, product) => {
+    const match = /^ac-(\d+)$/.exec(product.id)
+    return match ? Math.max(max, Number(match[1])) : max
+  }, 0)
+
+  let index = highest + 1
+  let id = `ac-${String(index).padStart(3, '0')}`
+  while (used.has(id)) {
+    index += 1
+    id = `ac-${String(index).padStart(3, '0')}`
+  }
+  return id
+}
+
+const blankProduct = (id: string): Product => ({
+  id,
+  name: '',
+  category: CATEGORIES[0]?.name ?? '',
+  gender: 'Unisex',
+  description: '',
+  story: '',
+  images: [],
+  colours: [],
+  sizes: [],
+  available: true,
+  availabilityNote: '',
+  isNewArrival: true,
+  isBestSeller: false,
+  isFeatured: false,
+  isTopRecommended: false,
+  collection: COLLECTIONS[0]?.name ?? '',
+  dateAdded: today(),
+  originalPrice: 0,
+  discountPrice: null,
+  quantity: 0,
+  sortOrder: 0,
+})
+
+function ProductThumb({ src, name }: { src?: string; name: string }) {
+  if (!src) {
+    return (
+      <div
+        className="img-frame grid h-16 w-12 shrink-0 place-items-center text-[0.55rem] uppercase tracking-[0.1em] text-ink/40"
+        aria-hidden="true"
+      >
+        No photo
+      </div>
+    )
+  }
 
   return (
-    <div className="img-frame relative aspect-[4/5]">
-      <SmartImage src={src} alt="" loading="lazy" onMissing={() => setMissing(true)} />
-      {missing ? (
-        <span className="badge badge-out absolute right-2 top-2">Missing file</span>
-      ) : null}
+    <div className="img-frame h-16 w-12 shrink-0">
+      <SmartImage
+        src={src}
+        alt={`${name} thumbnail`}
+        width={48}
+        height={64}
+        loading="lazy"
+      />
     </div>
   )
 }
@@ -145,7 +186,7 @@ function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
       onSuccess()
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : 'Could not sign in to the admin.',
+        err instanceof Error ? err.message : 'Could not sign in. Please try again.',
       )
     } finally {
       setBusy(false)
@@ -157,10 +198,11 @@ function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ink/60">
         Private page
       </p>
-      <h1 className="mt-3 font-serif text-5xl lg:text-6xl">Admin access</h1>
+      <h1 className="mt-3 font-serif text-5xl text-balance lg:text-6xl">
+        Admin access
+      </h1>
       <p className="mt-4 text-ink/70">
-        Sign in with your admin username and password. No GitHub token or expiring
-        access key is used.
+        Sign in with your admin username and password.
       </p>
 
       <form onSubmit={submit} className="mt-10 space-y-5 border border-ink/20 p-6">
@@ -170,9 +212,10 @@ function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
           </label>
           <input
             id="admin-username"
+            name="username"
             type="text"
             autoComplete="username"
-            autoFocus
+            spellCheck={false}
             className="input"
             value={username}
             onChange={(event) => setUsername(event.target.value)}
@@ -185,6 +228,7 @@ function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
           </label>
           <input
             id="admin-password"
+            name="password"
             type="password"
             autoComplete="current-password"
             className="input"
@@ -203,44 +247,655 @@ function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
           ) : (
             <LogIn className="h-4 w-4" aria-hidden="true" />
           )}
-          {busy ? 'Signing in...' : 'Log in'}
+          {busy ? 'Signing in…' : 'Log in'}
         </button>
       </form>
 
       <p className="mt-5 text-xs leading-relaxed text-ink/60">
-        Your password is checked against the admin account in the database.
-        Stay signed in only on devices you trust.
+        Keep your password private and sign out when using a shared device.
       </p>
     </main>
+  )
+}
+
+type ProductEditorProps = {
+  product: Product
+  mode: EditorMode
+  onClose: () => void
+  onSave: (product: Product) => Promise<boolean>
+}
+
+function ProductEditor({ product, mode, onClose, onSave }: ProductEditorProps) {
+  const [draft, setDraft] = useState<Product>(() => ({
+    ...product,
+    images: [...product.images],
+    colours: product.colours.map((colour) => ({ ...colour })),
+    sizes: [...product.sizes],
+  }))
+  const [price, setPrice] = useState(
+    product.originalPrice ? String(product.originalPrice) : '',
+  )
+  const [sale, setSale] = useState(
+    product.discountPrice ? String(product.discountPrice) : '',
+  )
+  const [stock, setStock] = useState(String(product.quantity ?? 0))
+  const [sizes, setSizes] = useState(product.sizes.join(', '))
+  const [notice, setNotice] = useState<Notice>(EMPTY_NOTICE)
+  const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const alreadyLocked = document.body.classList.contains('no-scroll')
+    document.body.classList.add('no-scroll')
+
+    if (!panelRef.current?.contains(document.activeElement)) {
+      panelRef.current?.focus()
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose()
+        return
+      }
+      if (event.key !== 'Tab' || !panelRef.current) return
+
+      const focusable = Array.from(
+        panelRef.current.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => element.getClientRects().length > 0)
+
+      if (!focusable.length) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      if (!alreadyLocked) document.body.classList.remove('no-scroll')
+    }
+  }, [onClose])
+
+  const setField = <K extends keyof Product>(key: K, value: Product[K]) => {
+    setDraft((current) => ({ ...current, [key]: value }))
+  }
+
+  const addFiles = async (files: FileList | null) => {
+    if (!files?.length) return
+    setUploading(true)
+    setNotice({ text: 'Uploading photos…', kind: 'msg-info' })
+
+    if (!isCloudinaryConfigured) {
+      setNotice({
+        text: 'Photo upload is not available right now. Please try again later.',
+        kind: 'msg-err',
+      })
+      setUploading(false)
+      return
+    }
+
+    const uploaded: string[] = []
+    let failed = 0
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith('image/')) {
+        failed += 1
+        continue
+      }
+      try {
+        const dataUrl = await compressImage(file)
+        uploaded.push(await uploadImageToCloudinary(dataUrl))
+      } catch {
+        failed += 1
+      }
+    }
+
+    if (uploaded.length) {
+      setDraft((current) => ({
+        ...current,
+        images: [...current.images, ...uploaded],
+      }))
+      setNotice({
+        text: `${uploaded.length} photo${
+          uploaded.length === 1 ? '' : 's'
+        } added${failed ? ` · ${failed} could not be uploaded` : ''}.`,
+        kind: failed ? 'msg-info' : 'msg-ok',
+      })
+    } else {
+      setNotice({
+        text: 'No photos could be uploaded. Try a different file.',
+        kind: 'msg-err',
+      })
+    }
+    setUploading(false)
+  }
+
+  const removeImage = (index: number) => {
+    if (draft.images.length <= 1) {
+      setNotice({
+        text: 'A product needs at least one photo. Add another first.',
+        kind: 'msg-err',
+      })
+      return
+    }
+    setDraft((current) => ({
+      ...current,
+      images: current.images.filter((_, imageIndex) => imageIndex !== index),
+    }))
+    setNotice(EMPTY_NOTICE)
+  }
+
+  const makeCover = (index: number) => {
+    if (index === 0) return
+    setDraft((current) => ({
+      ...current,
+      images: [
+        current.images[index],
+        ...current.images.filter((_, imageIndex) => imageIndex !== index),
+      ],
+    }))
+    setNotice({ text: 'Cover photo updated.', kind: 'msg-ok' })
+  }
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const nextPrice = Number(price)
+    const nextSale = sale.trim() ? Number(sale) : null
+    const nextStock = Number(stock)
+
+    if (!draft.name.trim()) {
+      setNotice({ text: 'Enter a product name.', kind: 'msg-err' })
+      return
+    }
+    if (!Number.isFinite(nextPrice) || nextPrice <= 0) {
+      setNotice({ text: 'Enter a regular price greater than zero.', kind: 'msg-err' })
+      return
+    }
+    if (nextSale !== null && (!Number.isFinite(nextSale) || nextSale <= 0)) {
+      setNotice({ text: 'Enter a valid sale price, or leave it empty.', kind: 'msg-err' })
+      return
+    }
+    if (nextSale !== null && nextSale >= nextPrice) {
+      setNotice({
+        text: 'The sale price must be lower than the regular price.',
+        kind: 'msg-err',
+      })
+      return
+    }
+    if (!Number.isFinite(nextStock) || nextStock < 0) {
+      setNotice({ text: 'Enter a stock quantity of zero or more.', kind: 'msg-err' })
+      return
+    }
+    if (!draft.images.length) {
+      setNotice({
+        text: 'Add at least one photo before saving this product.',
+        kind: 'msg-err',
+      })
+      return
+    }
+
+    const prepared: Product = {
+      ...draft,
+      name: draft.name.trim(),
+      description: draft.description.trim(),
+      story: (draft.story ?? '').trim(),
+      availabilityNote: (draft.availabilityNote ?? '').trim(),
+      sizes: sizes
+        .split(',')
+        .map((size) => size.trim())
+        .filter(Boolean),
+      originalPrice: Math.round(nextPrice),
+      discountPrice: nextSale === null ? null : Math.round(nextSale),
+      quantity: Math.max(0, Math.round(nextStock)),
+    }
+
+    setSaving(true)
+    const ok = await onSave(prepared)
+    setSaving(false)
+    if (!ok) {
+      setNotice({
+        text: 'Could not save this product. Check your connection and try again.',
+        kind: 'msg-err',
+      })
+    }
+  }
+
+  return (
+    <div className="admin-panel-overlay">
+      <div
+        ref={panelRef}
+        tabIndex={-1}
+        className="admin-panel focus:outline-none"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="product-editor-title"
+      >
+        <form onSubmit={submit} className="flex min-h-full flex-col">
+          <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-ink/10 bg-cream/95 px-5 py-4 backdrop-blur lg:px-8">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ink/60">
+                {mode === 'create' ? 'New product' : 'Edit product'}
+              </p>
+              <h2
+                id="product-editor-title"
+                className="mt-1 truncate font-serif text-3xl"
+              >
+                {mode === 'create' ? 'Add a product' : draft.name || 'Product details'}
+              </h2>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="grid h-10 w-10 shrink-0 place-items-center border border-ink/20 transition-colors hover:bg-ink hover:text-cream"
+              aria-label="Close editor"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </header>
+
+          <div className="flex-1 space-y-9 px-5 py-6 lg:px-8">
+            <section aria-labelledby="editor-details-title">
+              <h3
+                id="editor-details-title"
+                className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/60"
+              >
+                Details
+              </h3>
+              <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                <label className="sm:col-span-2">
+                  <span className="mb-1.5 block text-sm font-medium">
+                    Product name
+                  </span>
+                  <input
+                    name="name"
+                    autoComplete="off"
+                    className="input"
+                    value={draft.name}
+                    onChange={(event) => setField('name', event.target.value)}
+                    placeholder="e.g. Anonymous Tee"
+                    autoFocus={mode === 'create'}
+                  />
+                </label>
+                <label>
+                  <span className="mb-1.5 block text-sm font-medium">Category</span>
+                  <input
+                    name="category"
+                    list="product-category-options"
+                    autoComplete="off"
+                    className="input"
+                    value={draft.category}
+                    onChange={(event) => setField('category', event.target.value)}
+                    placeholder="Choose or type a category"
+                  />
+                  <datalist id="product-category-options">
+                    {CATEGORIES.map((category) => (
+                      <option key={category.name} value={category.name} />
+                    ))}
+                  </datalist>
+                  <span className="mt-1 block text-xs text-ink/50">
+                    Pick a category or type a new one.
+                  </span>
+                </label>
+                <label>
+                  <span className="mb-1.5 block text-sm font-medium">Gender</span>
+                  <select
+                    name="gender"
+                    className="select"
+                    value={draft.gender}
+                    onChange={(event) => setField('gender', event.target.value)}
+                  >
+                    {GENDERS.map((gender) => (
+                      <option key={gender} value={gender}>
+                        {gender}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="sm:col-span-2">
+                  <span className="mb-1.5 block text-sm font-medium">
+                    Collection
+                  </span>
+                  <select
+                    name="collection"
+                    className="select"
+                    value={draft.collection}
+                    onChange={(event) => setField('collection', event.target.value)}
+                  >
+                    {COLLECTIONS.map((collection) => (
+                      <option key={collection.name} value={collection.name}>
+                        {collection.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="sm:col-span-2">
+                  <span className="mb-1.5 block text-sm font-medium">Sizes</span>
+                  <input
+                    name="sizes"
+                    autoComplete="off"
+                    className="input"
+                    value={sizes}
+                    onChange={(event) => setSizes(event.target.value)}
+                    placeholder="e.g. S, M, L, XL"
+                  />
+                  <span className="mt-1 block text-xs text-ink/50">
+                    Separate sizes with commas. Leave empty if there are no size
+                    options.
+                  </span>
+                </label>
+                <label className="sm:col-span-2">
+                  <span className="mb-1.5 block text-sm font-medium">
+                    Description
+                  </span>
+                  <textarea
+                    name="description"
+                    className="input min-h-24 resize-y"
+                    rows={3}
+                    value={draft.description}
+                    onChange={(event) =>
+                      setField('description', event.target.value)
+                    }
+                    placeholder="What makes this piece different?"
+                  />
+                </label>
+                <label className="sm:col-span-2">
+                  <span className="mb-1.5 block text-sm font-medium">
+                    Story <span className="font-normal text-ink/50">(optional)</span>
+                  </span>
+                  <textarea
+                    name="story"
+                    className="input min-h-20 resize-y"
+                    rows={2}
+                    value={draft.story ?? ''}
+                    onChange={(event) => setField('story', event.target.value)}
+                    placeholder="A short note shown on the product page."
+                  />
+                </label>
+              </div>
+            </section>
+
+            <section aria-labelledby="editor-price-title">
+              <h3
+                id="editor-price-title"
+                className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/60"
+              >
+                Price &amp; stock
+              </h3>
+              <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3">
+                <label>
+                  <span className="mb-1.5 block text-sm font-medium">
+                    Regular price (₦)
+                  </span>
+                  <input
+                    name="regularPrice"
+                    autoComplete="off"
+                    type="number"
+                    min={0}
+                    step={100}
+                    inputMode="numeric"
+                    className="input tabular-nums"
+                    value={price}
+                    onChange={(event) => setPrice(event.target.value)}
+                  />
+                </label>
+                <label>
+                  <span className="mb-1.5 block text-sm font-medium">
+                    Sale price (₦)
+                  </span>
+                  <input
+                    name="salePrice"
+                    autoComplete="off"
+                    type="number"
+                    min={0}
+                    step={100}
+                    inputMode="numeric"
+                    className="input tabular-nums"
+                    value={sale}
+                    onChange={(event) => setSale(event.target.value)}
+                    placeholder="No sale"
+                  />
+                </label>
+                <label className="col-span-2 sm:col-span-1">
+                  <span className="mb-1.5 block text-sm font-medium">Stock</span>
+                  <input
+                    name="stock"
+                    autoComplete="off"
+                    type="number"
+                    min={0}
+                    inputMode="numeric"
+                    className="input tabular-nums"
+                    value={stock}
+                    onChange={(event) => setStock(event.target.value)}
+                  />
+                </label>
+              </div>
+            </section>
+
+            <section aria-labelledby="editor-availability-title">
+              <h3
+                id="editor-availability-title"
+                className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/60"
+              >
+                Availability
+              </h3>
+              <div className="mt-3 space-y-3">
+                <label className="flex items-start gap-3 border border-ink/15 p-3">
+                  <input
+                    name="available"
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 accent-[#A83232]"
+                    checked={draft.available}
+                    onChange={(event) =>
+                      setField('available', event.target.checked)
+                    }
+                  />
+                  <span>
+                    <span className="block text-sm font-medium">
+                      Available to buy
+                    </span>
+                    <span className="block text-xs text-ink/60">
+                      Customers can add this product to their cart.
+                    </span>
+                  </span>
+                </label>
+                {!draft.available ? (
+                  <label>
+                    <span className="mb-1.5 block text-sm font-medium">
+                      Restock note
+                    </span>
+                    <input
+                      name="availabilityNote"
+                      autoComplete="off"
+                      className="input"
+                      value={draft.availabilityNote ?? ''}
+                      onChange={(event) =>
+                        setField('availabilityNote', event.target.value)
+                      }
+                      placeholder="e.g. Message us about the next restock."
+                    />
+                  </label>
+                ) : null}
+              </div>
+            </section>
+
+            <section aria-labelledby="editor-photos-title">
+              <div className="flex items-baseline justify-between gap-3">
+                <h3
+                  id="editor-photos-title"
+                  className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/60"
+                >
+                  Photos
+                </h3>
+                <span className="text-xs text-ink/60">
+                  {draft.images.length} photo{draft.images.length === 1 ? '' : 's'}
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-ink/60">
+                The first photo is the cover. Use Cover to change it.
+              </p>
+
+              {draft.images.length ? (
+                <div className="mt-3 grid grid-cols-3 gap-3 sm:grid-cols-4">
+                  {draft.images.map((src, index) => (
+                    <figure
+                      key={`${src.slice(0, 40)}-${index}`}
+                      className="min-w-0"
+                    >
+                      <div className="relative">
+                        <div className="img-frame aspect-[4/5]">
+                          <SmartImage
+                            src={src}
+                            alt={`${draft.name || 'Product'} photo ${index + 1}`}
+                            width={160}
+                            height={200}
+                            loading="lazy"
+                          />
+                        </div>
+                        {index === 0 ? (
+                          <span className="badge badge-best absolute left-1.5 top-1.5">
+                            Cover
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="mt-1.5 flex items-center justify-between gap-1 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => makeCover(index)}
+                          disabled={index === 0}
+                          className={`inline-flex items-center gap-1 ${
+                            index === 0
+                              ? 'text-ink/30'
+                              : 'text-ink/70 hover:text-ink'
+                          }`}
+                          aria-label={`Make photo ${index + 1} the cover`}
+                        >
+                          <Star className="h-3 w-3" aria-hidden="true" /> Cover
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeImage(index)}
+                          className="inline-flex items-center gap-1 text-ink/60 transition-colors hover:text-choc"
+                          aria-label={`Remove photo ${index + 1}`}
+                        >
+                          <Trash2 className="h-3 w-3" aria-hidden="true" /> Remove
+                        </button>
+                      </div>
+                    </figure>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-3 border border-dashed border-ink/25 p-6 text-center text-sm text-ink/60">
+                  No photos yet. Upload at least one so customers can see the
+                  product.
+                </p>
+              )}
+
+              <div className="mt-4">
+                <label
+                  htmlFor={`upload-${draft.id}`}
+                  className="btn btn-light cursor-pointer"
+                >
+                  {uploading ? (
+                    <Loader2
+                      className="h-4 w-4 animate-spin"
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <Upload className="h-4 w-4" aria-hidden="true" />
+                  )}
+                  {uploading ? 'Uploading…' : 'Upload photos'}
+                </label>
+                <input
+                  id={`upload-${draft.id}`}
+                  name="photos"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  disabled={uploading}
+                  onChange={(event) => {
+                    void addFiles(event.target.files)
+                    event.target.value = ''
+                  }}
+                />
+              </div>
+            </section>
+
+          </div>
+
+          <footer className="sticky bottom-0 z-10 flex flex-wrap items-center gap-3 border-t border-ink/10 bg-cream/95 px-5 py-4 backdrop-blur lg:px-8">
+            <p
+              role="status"
+              aria-live="polite"
+              className={`min-h-[1.25rem] w-full text-sm ${notice.kind}`.trim()}
+            >
+              {notice.text}
+            </p>
+            <button
+              type="submit"
+              className="btn btn-dark"
+              disabled={saving || uploading}
+            >
+              {saving ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Save className="h-4 w-4" aria-hidden="true" />
+              )}
+              {saving
+                ? 'Saving…'
+                : mode === 'create'
+                  ? 'Add product'
+                  : 'Save changes'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-light"
+              onClick={onClose}
+              disabled={saving}
+            >
+              Cancel
+            </button>
+          </footer>
+        </form>
+      </div>
+    </div>
   )
 }
 
 function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const {
     products,
-    overrides,
     featuredCollections,
     bestSellers,
     topRecommended,
     featuredProducts,
     newArrivals,
     featuredCategories,
-    publishState,
-    savePrices,
-    setProductImages,
     saveSelections,
-    resetPrices,
-    resetProductImages,
-    resetAll,
-    publishNow,
     saveProductList,
+    deleteProductById,
   } = useCatalogue()
 
+  const [view, setView] = useState<'products' | 'homepage'>('products')
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [editor, setEditor] = useState<{
+    mode: EditorMode
+    product: Product
+  } | null>(null)
+  const [productNotice, setProductNotice] = useState<Notice>(EMPTY_NOTICE)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const closeEditor = useCallback(() => setEditor(null), [])
 
-
-  const [rows, setRows] = useState<PriceRow[]>(() => buildRows(products))
-  const [priceNotice, setPriceNotice] = useState<Notice>(EMPTY_NOTICE)
-  const [copyNotice, setCopyNotice] = useState<Notice>(EMPTY_NOTICE)
   const [selectionNotice, setSelectionNotice] = useState<Notice>(EMPTY_NOTICE)
   const [selectedCollections, setSelectedCollections] = useState<string[]>(
     featuredCollections,
@@ -260,119 +915,79 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const [selectedCategories, setSelectedCategories] = useState<string[]>(
     featuredCategories,
   )
-  const [imageNotices, setImageNotices] = useState<Record<string, Notice>>({})
-  const [pathValues, setPathValues] = useState<Record<string, string>>({})
-  const [busyId, setBusyId] = useState<string | null>(null)
-  const [stockNotice, setStockNotice] = useState<Notice>(EMPTY_NOTICE)
-  const [stockValues, setStockValues] = useState<Record<string, string>>({})
 
-  const data = useMemo(
-    () =>
-      rows.map((row) => {
-        const product = products.find((p) => p.id === row.id)
-        const old = Number(row.old) || 0
-        const sale = Number(row.sale) || 0
-        const onSale = sale > 0 && sale < old
-        const bad = sale > 0 && sale >= old
-        return { row, product, old, sale, onSale, bad }
-      }),
-    [products, rows],
-  )
-
-  const priceOutput = useMemo(
-    () =>
-      `const PRICE_LIST = {\n${data
-        .map(
-          ({ product, old, sale, onSale }) =>
-            `  "${product?.id}": { old: ${old || 0}, sale: ${
-              onSale ? sale : 'null'
-            } },   // ${product?.name}`,
-        )
-        .join('\n')}\n};`,
-    [data],
-  )
-
-  const storageBytes = useMemo(
-    () => new Blob([JSON.stringify(overrides)]).size,
-    [overrides],
-  )
-  const storageKb = Math.round(storageBytes / 1024)
-
-  const setImageNotice = (id: string, text: string, kind: string) => {
-    setImageNotices((current) => ({ ...current, [id]: { text, kind } }))
-  }
-
-  const updateRow = (id: string, field: 'old' | 'sale', value: string) => {
-    setRows((current) =>
-      current.map((row) => (row.id === id ? { ...row, [field]: value } : row)),
+  const filteredProducts = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    if (!query) return products
+    return products.filter((product) =>
+      [product.name, product.category, product.collection, product.gender].some(
+        (value) => value.toLowerCase().includes(query),
+      ),
     )
-    setPriceNotice(EMPTY_NOTICE)
+  }, [products, search])
+
+  const pageCount = Math.max(1, Math.ceil(filteredProducts.length / PAGE_SIZE))
+  const currentPage = Math.min(page, pageCount)
+  const pageStart = (currentPage - 1) * PAGE_SIZE
+  const visibleProducts = filteredProducts.slice(pageStart, pageStart + PAGE_SIZE)
+
+  const onSaleCount = products.filter(
+    (product) =>
+      product.discountPrice !== null &&
+      product.discountPrice > 0 &&
+      product.discountPrice < product.originalPrice,
+  ).length
+  const outOfStockCount = products.filter(
+    (product) => !product.available || product.quantity === 0,
+  ).length
+
+  const saveProduct = async (next: Product): Promise<boolean> => {
+    const exists = products.some((product) => product.id === next.id)
+    const sortOrder = exists
+      ? (next.sortOrder ?? 0)
+      : Math.max(0, ...products.map((product) => product.sortOrder ?? 0)) + 1
+    const prepared: Product = { ...next, sortOrder }
+    const list = exists
+      ? products.map((product) => (product.id === next.id ? prepared : product))
+      : [...products, prepared]
+
+    setProductNotice(EMPTY_NOTICE)
+    const ok = await saveProductList(list)
+    if (ok) {
+      if (!exists) {
+        setSearch('')
+        setPage(Math.max(1, Math.ceil((products.length + 1) / PAGE_SIZE)))
+      }
+      setProductNotice({
+        text: exists
+          ? `“${prepared.name}” was updated.`
+          : `“${prepared.name}” was added.`,
+        kind: 'msg-ok',
+      })
+      setEditor(null)
+    }
+    return ok
   }
 
-  const savePriceChanges = () => {
-    const invalid = data.find((entry) => !entry.old || entry.bad)
-    if (invalid) {
-      setPriceNotice({
-        text: !invalid.old
-          ? `Enter an old price for ${invalid.product?.name}.`
-          : `The sale price for ${invalid.product?.name} must be lower than its old price.`,
-        kind: 'msg-err',
-      })
+  const removeProduct = async (product: Product) => {
+    if (
+      !window.confirm(`Delete “${product.name}”? This cannot be undone.`)
+    ) {
       return
     }
 
-    const baseById = new Map(BASE_PRODUCTS.map((product) => [product.id, product]))
-    const prices: Record<string, PriceOverride> = {}
-    data.forEach(({ product, old, onSale, sale }) => {
-      if (!product) return
-      const base = baseById.get(product.id)
-      const nextSale = onSale ? sale : null
-      // Only store real overrides so later catalogue edits still flow through.
-      if (base && old === base.originalPrice && nextSale === base.discountPrice) {
-        return
-      }
-      prices[product.id] = { old, sale: nextSale }
-    })
-
-    if (savePrices(prices)) {
-      setPriceNotice({
-        text: 'Prices saved. The shop, product pages and cart now show them.',
-        kind: 'msg-ok',
-      })
-    } else {
-      setPriceNotice({
-        text: 'Could not save in this browser. Storage may be full or blocked.',
-        kind: 'msg-err',
-      })
-    }
-  }
-
-  const resetPriceChanges = () => {
-    if (!window.confirm('Reset every price to the values in catalogue.ts?')) return
-    if (resetPrices()) {
-      setRows(buildRows(BASE_PRODUCTS))
-      setPriceNotice({
-        text: 'Prices reset to the catalogue defaults.',
-        kind: 'msg-info',
-      })
-    }
-  }
-
-  const copyPriceList = async () => {
-    try {
-      await navigator.clipboard.writeText(priceOutput)
-    } catch {
-      const textarea = document.createElement('textarea')
-      textarea.value = priceOutput
-      document.body.appendChild(textarea)
-      textarea.select()
-      document.execCommand('copy')
-      document.body.removeChild(textarea)
-    }
-    setCopyNotice({
-      text: 'Copied. Paste it over PRICE_LIST in src/data/catalogue.ts to publish it.',
-      kind: 'msg-ok',
-    })
+    setDeletingId(product.id)
+    setProductNotice(EMPTY_NOTICE)
+    const ok = await deleteProductById(product.id)
+    setDeletingId(null)
+    setProductNotice(
+      ok
+        ? { text: `“${product.name}” was deleted.`, kind: 'msg-ok' }
+        : {
+            text: 'Could not delete that product. Check your connection and try again.',
+            kind: 'msg-err',
+          },
+    )
   }
 
   const toggleCollection = (name: string) => {
@@ -429,7 +1044,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     }
     if (selectedCategories.length !== 5) {
       setSelectionNotice({
-        text: 'Choose exactly five featured categories for the homepage row.',
+        text: 'Choose exactly five featured categories.',
         kind: 'msg-err',
       })
       return
@@ -453,36 +1068,19 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
 
     if (saveSelections(selections)) {
       setSelectionNotice({
-        text: 'Homepage selections saved. The shop and homepage now use them.',
+        text: 'Homepage selections updated.',
         kind: 'msg-ok',
       })
     } else {
       setSelectionNotice({
-        text: 'Could not save in this browser. Storage may be full or blocked.',
+        text: 'Could not save your selections. Please try again.',
         kind: 'msg-err',
       })
     }
   }
 
-  const saveStock = async () => {
-    const next = products.map((product) => ({
-      ...product,
-      quantity: Math.max(
-        0,
-        Number(stockValues[product.id] ?? product.quantity ?? 0) || 0,
-      ),
-    }))
-    const ok = await saveProductList(next)
-    setStockNotice({
-      text: ok
-        ? 'Stock saved for every visitor.'
-        : 'Could not save stock. Check your connection and try again.',
-      kind: ok ? 'msg-ok' : 'msg-err',
-    })
-  }
-
   const resetSelectionChanges = () => {
-    if (!window.confirm('Reset the featured and best-seller selections?')) return
+    if (!window.confirm('Reset the homepage selections to the defaults?')) return
     setSelectedCollections(DEFAULT_COLLECTION_SELECTION)
     setSelectedCategories(DEFAULT_CATEGORY_SELECTION)
     setSelectedBestSellers(DEFAULT_BEST_SELLER_SELECTION)
@@ -500,174 +1098,10 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
       })
     ) {
       setSelectionNotice({
-        text: 'Selections reset to the catalogue defaults.',
+        text: 'Homepage selections reset to the defaults.',
         kind: 'msg-info',
       })
     }
-  }
-
-  const addFiles = async (product: Product, files: FileList | null) => {
-    if (!files || !files.length) return
-    setBusyId(product.id)
-    setImageNotice(product.id, 'Processing photos for Cloudinary...', 'msg-info')
-
-    const accepted: string[] = []
-    for (const file of Array.from(files)) {
-      if (!file.type.startsWith('image/')) continue
-      try {
-        accepted.push(await compressImage(file))
-      } catch {
-        /* skip unreadable file */
-      }
-    }
-
-    if (!accepted.length) {
-      setImageNotice(product.id, 'No readable image files were selected.', 'msg-err')
-      setBusyId(null)
-      return
-    }
-
-    if (!isCloudinaryConfigured) {
-      setImageNotice(
-        product.id,
-        'Cloudinary is not configured. Add VITE_CLOUDINARY_CLOUD_NAME and VITE_CLOUDINARY_UPLOAD_PRESET to the deployment variables.',
-        'msg-err',
-      )
-      setBusyId(null)
-      return
-    }
-
-    const uploaded: string[] = []
-    let failed = 0
-    for (const image of accepted) {
-      try {
-        uploaded.push(await uploadImageToCloudinary(image))
-      } catch {
-        failed += 1
-      }
-    }
-
-    if (!uploaded.length) {
-      setImageNotice(
-        product.id,
-        'Cloudinary rejected the upload. Check the unsigned upload preset.',
-        'msg-err',
-      )
-      setBusyId(null)
-      return
-    }
-
-    const ok = setProductImages(product.id, [...product.images, ...uploaded])
-    setImageNotice(
-      product.id,
-      ok
-        ? `${uploaded.length} photo${
-            uploaded.length === 1 ? '' : 's'
-          } uploaded to Cloudinary and added${
-            failed ? ` (${failed} failed)` : ''
-          }. Publishing to the live site...`
-        : 'Could not save these photos. Browser storage may be full.',
-      ok ? 'msg-ok' : 'msg-err',
-    )
-    setBusyId(null)
-  }
-
-  const addImagePath = (product: Product) => {
-    const value = (pathValues[product.id] || '').trim()
-    if (!value) {
-      setImageNotice(product.id, 'Enter an image path or URL first.', 'msg-err')
-      return
-    }
-    if (product.images.includes(value)) {
-      setImageNotice(product.id, 'That image is already in this product.', 'msg-info')
-      return
-    }
-    const ok = setProductImages(product.id, [...product.images, value])
-    if (ok) {
-      setPathValues((current) => ({ ...current, [product.id]: '' }))
-      setImageNotice(product.id, 'Image path added.', 'msg-ok')
-    } else {
-      setImageNotice(product.id, 'Could not save this change.', 'msg-err')
-    }
-  }
-
-  const removeImage = (product: Product, index: number) => {
-    if (product.images.length <= 1) {
-      setImageNotice(
-        product.id,
-        'A product needs at least one image. Add another photo first.',
-        'msg-err',
-      )
-      return
-    }
-    const ok = setProductImages(
-      product.id,
-      product.images.filter((_, imageIndex) => imageIndex !== index),
-    )
-    setImageNotice(
-      product.id,
-      ok ? 'Photo removed.' : 'Could not save this change.',
-      ok ? 'msg-ok' : 'msg-err',
-    )
-  }
-
-  const makeCover = (product: Product, index: number) => {
-    if (index === 0) return
-    const next = [
-      product.images[index],
-      ...product.images.filter((_, imageIndex) => imageIndex !== index),
-    ]
-    const ok = setProductImages(product.id, next)
-    setImageNotice(
-      product.id,
-      ok ? 'Cover photo updated.' : 'Could not save this change.',
-      ok ? 'msg-ok' : 'msg-err',
-    )
-  }
-
-  const resetImages = (product: Product) => {
-    if (!window.confirm(`Reset photos for ${product.name} to the catalogue defaults?`))
-      return
-    const ok = resetProductImages(product.id)
-    setImageNotice(
-      product.id,
-      ok ? 'Photos reset to the catalogue defaults.' : 'Could not save this change.',
-      ok ? 'msg-info' : 'msg-err',
-    )
-  }
-
-  const downloadBackup = () => {
-    const blob = new Blob([JSON.stringify(overrides, null, 2)], {
-      type: 'application/json',
-    })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = 'anonymous-collectives-admin-changes.json'
-    document.body.appendChild(anchor)
-    anchor.click()
-    anchor.remove()
-    URL.revokeObjectURL(url)
-  }
-
-  const resetEverything = () => {
-    if (
-      !window.confirm(
-        'Reset every admin change? This also resets the live website for all visitors. This cannot be undone.',
-      )
-    )
-      return
-    resetAll()
-    setRows(buildRows(BASE_PRODUCTS))
-    setSelectedCollections(DEFAULT_COLLECTION_SELECTION)
-    setSelectedCategories(DEFAULT_CATEGORY_SELECTION)
-    setSelectedBestSellers(DEFAULT_BEST_SELLER_SELECTION)
-    setSelectionNotice(EMPTY_NOTICE)
-    setImageNotices({})
-    setPriceNotice({
-      text: 'All admin changes were reset to the catalogue defaults.',
-      kind: 'msg-info',
-    })
   }
 
   const logout = () => {
@@ -676,15 +1110,34 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   }
 
   return (
-    <main id="main" className="mx-auto max-w-6xl px-5 py-14 lg:py-20">
+    <main id="main" className="mx-auto max-w-7xl px-5 py-14 lg:py-20">
       <div className="flex flex-wrap items-end justify-between gap-5">
-        <div>
+        <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ink/60">
-            Signed in as Admin
+            Admin
           </p>
-          <h1 className="mt-2 font-serif text-5xl lg:text-6xl">Manage the shop</h1>
+          <h1 className="mt-2 font-serif text-5xl text-balance lg:text-6xl">
+            Manage the shop
+          </h1>
+          <p className="mt-3 max-w-2xl text-ink/70">
+            Add products, update prices and stock, and choose what appears on the
+            homepage.
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="btn btn-dark"
+            onClick={() => {
+              setView('products')
+              setEditor({
+                mode: 'create',
+                product: blankProduct(nextProductId(products)),
+              })
+            }}
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" /> Add product
+          </button>
           <Link to="/shop" className="btn btn-light">
             View shop
           </Link>
@@ -694,617 +1147,487 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
         </div>
       </div>
 
-      <p className="mt-4 max-w-3xl text-ink/70">
-        Edit prices, photos and homepage selections below. Saves go to the live
-        storefront database, so every visitor on every device sees them.
-      </p>
-
-      <div className="mt-6 border border-ink/15 bg-sand/40 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-medium">
-              Live storefront{' '}
-              <span className="font-normal text-ink/60">· Supabase</span>
-            </p>
-            <p
-              role="status"
-              className={`mt-1 text-sm ${
-                publishState.status === 'error'
-                  ? 'msg-err'
-                  : publishState.status === 'success'
-                    ? 'msg-ok'
-                    : publishState.status === 'publishing'
-                      ? 'msg-info'
-                      : 'text-ink/60'
-              }`.trim()}
-            >
-              {publishState.message ||
-                'Connected. Changes publish to every visitor automatically.'}
-            </p>
-          </div>
-          <button
-            type="button"
-            className="btn btn-light"
-            onClick={() => void publishNow()}
-            disabled={publishState.status === 'publishing'}
-          >
-            <Upload className="h-4 w-4" aria-hidden="true" />
-            {publishState.status === 'publishing'
-              ? 'Publishing...'
-              : 'Publish current data'}
-          </button>
+      <div className="mt-8 grid gap-3 sm:grid-cols-3">
+        <div className="border border-ink/15 bg-sand/40 p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink/55">
+            Products
+          </p>
+          <p className="mt-1 font-serif text-3xl tabular-nums">{products.length}</p>
+        </div>
+        <div className="border border-ink/15 bg-sand/40 p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink/55">
+            On sale
+          </p>
+          <p className="mt-1 font-serif text-3xl tabular-nums">{onSaleCount}</p>
+        </div>
+        <div className="border border-ink/15 bg-sand/40 p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink/55">
+            Out of stock
+          </p>
+          <p className="mt-1 font-serif text-3xl tabular-nums">{outOfStockCount}</p>
         </div>
       </div>
 
-      {/* PRICES */}
-      <section className="mt-16" aria-labelledby="prices-title">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <h2 id="prices-title" className="font-serif text-4xl">
-            1. Prices
-          </h2>
-          <span className="text-xs text-ink/60">
-            {data.length} products
-          </span>
-        </div>
-        <p className="mt-3 max-w-2xl text-ink/70">
-          The <strong>old price</strong> is shown crossed out. The{' '}
-          <strong>sale price</strong> is what the customer pays. Leave the sale price
-          empty when a product is not on sale.
-        </p>
+      <div
+        className="mt-10 flex gap-1 border-b border-ink/15"
+        role="group"
+        aria-label="Admin sections"
+      >
+        <button
+          type="button"
+          onClick={() => setView('products')}
+          aria-pressed={view === 'products'}
+          className={`border-b-2 px-4 py-3 text-xs font-semibold uppercase tracking-[0.14em] transition-colors ${
+            view === 'products'
+              ? 'border-ink text-ink'
+              : 'border-transparent text-ink/50 hover:text-ink'
+          }`}
+        >
+          Products
+        </button>
+        <button
+          type="button"
+          onClick={() => setView('homepage')}
+          aria-pressed={view === 'homepage'}
+          className={`border-b-2 px-4 py-3 text-xs font-semibold uppercase tracking-[0.14em] transition-colors ${
+            view === 'homepage'
+              ? 'border-ink text-ink'
+              : 'border-transparent text-ink/50 hover:text-ink'
+          }`}
+        >
+          Homepage
+        </button>
+      </div>
 
-        <div className="mt-8 overflow-x-auto">
-          <table className="w-full min-w-[38rem] text-left text-sm">
-            <thead>
-              <tr className="border-b border-ink/20">
-                <th className="py-3 pr-3 font-semibold">Product</th>
-                <th className="py-3 pr-3 font-semibold">Old price (₦)</th>
-                <th className="py-3 pr-3 font-semibold">Sale price (₦)</th>
-                <th className="py-3 font-semibold">Customer sees</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map(({ row, product, old, sale, onSale, bad }) => (
-                <tr key={row.id} className="border-b border-ink/10">
-                  <td className="py-3 pr-3">
-                    <span className="font-medium">{product?.name}</span>
-                    <br />
-                    <span className="text-xs text-ink/60">{row.id}</span>
-                  </td>
-                  <td className="py-3 pr-3">
-                    <label className="sr-only" htmlFor={`old-${row.id}`}>
-                      Old price for {product?.name}
-                    </label>
-                    <input
-                      id={`old-${row.id}`}
-                      type="number"
-                      min={0}
-                      step={100}
-                      inputMode="numeric"
-                      className="input w-36"
-                      value={row.old}
-                      onChange={(event) =>
-                        updateRow(row.id, 'old', event.target.value)
-                      }
-                    />
-                  </td>
-                  <td className="py-3 pr-3">
-                    <label className="sr-only" htmlFor={`sale-${row.id}`}>
-                      Sale price for {product?.name}
-                    </label>
-                    <input
-                      id={`sale-${row.id}`}
-                      type="number"
-                      min={0}
-                      step={100}
-                      inputMode="numeric"
-                      className="input w-36"
-                      value={row.sale}
-                      placeholder="no sale"
-                      onChange={(event) =>
-                        updateRow(row.id, 'sale', event.target.value)
-                      }
-                    />
-                  </td>
-                  <td className="py-3 text-sm">
-                    {!old ? (
-                      <span className="msg-err">Enter the old price</span>
-                    ) : bad ? (
-                      <span className="msg-err">
-                        Sale price must be lower than the old price
-                      </span>
-                    ) : onSale ? (
-                      <>
-                        <span className="text-ink/50 line-through">
-                          {formatPrice(old)}
-                        </span>{' '}
-                        <strong>{formatPrice(sale)}</strong>{' '}
-                        <span className="text-ink/60">
-                          (-{Math.round((1 - sale / old) * 100)}%)
-                        </span>
-                      </>
-                    ) : (
-                      <strong>{formatPrice(old)}</strong>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="mt-6 flex flex-wrap items-center gap-3">
-          <button type="button" className="btn btn-dark" onClick={savePriceChanges}>
-            <Save className="h-4 w-4" aria-hidden="true" /> Save prices
-          </button>
-          <button type="button" className="btn btn-light" onClick={resetPriceChanges}>
-            <RefreshCw className="h-4 w-4" aria-hidden="true" /> Reset prices
-          </button>
-          <button type="button" className="btn btn-light" onClick={copyPriceList}>
-            Copy price list
-          </button>
-          <span role="status" className={`text-sm ${priceNotice.kind}`.trim()}>
-            {priceNotice.text}
-          </span>
-        </div>
-
-        <details className="mt-8 text-sm">
-          <summary className="cursor-pointer font-medium">
-            Code for src/data/catalogue.ts
-          </summary>
-          <p className="mt-3 max-w-2xl text-ink/70">
-            Copy this over <code>PRICE_LIST</code> in{' '}
-            <code>src/data/catalogue.ts</code> if you want the prices baked into the
-            site for every visitor. Copied text includes unsaved edits currently in
-            the table.
-          </p>
-          <textarea
-            rows={12}
-            readOnly
-            className="input mt-3 font-mono text-xs"
-            value={priceOutput}
-          />
-          <p role="status" className={`mt-2 text-sm ${copyNotice.kind}`.trim()}>
-            {copyNotice.text}
-          </p>
-        </details>
-      </section>
-
-      {/* STOCK */}
-      <section className="mt-16" aria-labelledby="stock-title">
-        <h2 id="stock-title" className="font-serif text-4xl">
-          Stock
-        </h2>
-        <p className="mt-3 max-w-2xl text-ink/70">
-          Quantity is stored in the products table. Set a product to 0 when it is
-          out of stock.
-        </p>
-        <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {products.map((product) => (
-            <label
-              key={product.id}
-              className="flex items-center justify-between gap-3 border border-ink/15 p-3 text-sm"
-            >
-              <span className="min-w-0">
-                <span className="block truncate font-medium">{product.name}</span>
-                <span className="block text-xs text-ink/60">{product.id}</span>
-              </span>
-              <input
-                type="number"
-                min={0}
-                inputMode="numeric"
-                className="input w-24"
-                value={stockValues[product.id] ?? String(product.quantity ?? 0)}
-                onChange={(event) =>
-                  setStockValues((current) => ({
-                    ...current,
-                    [product.id]: event.target.value,
-                  }))
-                }
-                aria-label={`Stock quantity for ${product.name}`}
+      {view === 'products' ? (
+        <section className="mt-8" aria-labelledby="products-title">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 id="products-title" className="font-serif text-3xl">
+                Products
+              </h2>
+              <p className="mt-1 text-sm text-ink/60">
+                {products.length} product{products.length === 1 ? '' : 's'} in the
+                shop.
+              </p>
+            </div>
+            <div className="relative w-full sm:w-72">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/40"
+                aria-hidden="true"
               />
-            </label>
-          ))}
-        </div>
-        <div className="mt-6 flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            className="btn btn-dark"
-            onClick={() => void saveStock()}
+              <label htmlFor="product-search" className="sr-only">
+                Search products
+              </label>
+              <input
+                id="product-search"
+                name="search"
+                type="search"
+                autoComplete="off"
+                spellCheck={false}
+                className="input pl-10"
+                placeholder="Search products…"
+                value={search}
+                onChange={(event) => {
+                  setSearch(event.target.value)
+                  setPage(1)
+                }}
+              />
+            </div>
+          </div>
+
+          <p
+            role="status"
+            aria-live="polite"
+            className={`mt-4 min-h-[1.25rem] text-sm ${productNotice.kind}`.trim()}
           >
-            <Save className="h-4 w-4" aria-hidden="true" /> Save stock
-          </button>
-          <span role="status" className={`text-sm ${stockNotice.kind}`.trim()}>
-            {stockNotice.text}
-          </span>
-        </div>
-      </section>
+            {productNotice.text}
+          </p>
 
-      {/* HOMEPAGE SELECTIONS */}
-      <section className="mt-20" aria-labelledby="selections-title">
-        <h2 id="selections-title" className="font-serif text-4xl">
-          2. Homepage selections
-        </h2>
-        <p className="mt-3 max-w-3xl text-ink/70">
-          Choose the five categories under the hero, the collections shown on the
-          shop&apos;s featured row, and the products that appear as best sellers.
-        </p>
+          <div className="mt-4 border border-ink/15">
+            <div className="hidden grid-cols-[3.5rem_minmax(0,1fr)_9rem_5rem_8rem] gap-4 border-b border-ink/15 bg-sand/50 px-4 py-2 text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-ink/50 md:grid">
+              <span>Photo</span>
+              <span>Product</span>
+              <span>Price</span>
+              <span>Stock</span>
+              <span className="text-right">Actions</span>
+            </div>
 
-        <div className="mt-8 grid gap-6 lg:grid-cols-2">
-          <div className="border border-ink/15 p-5">
+            {visibleProducts.length ? (
+              <ul className="divide-y divide-ink/10">
+                {visibleProducts.map((product) => {
+                  const onSale =
+                    product.discountPrice !== null &&
+                    product.discountPrice > 0 &&
+                    product.discountPrice < product.originalPrice
+                  const stockLabel =
+                    product.quantity === undefined
+                      ? '—'
+                      : `${product.quantity} left`
+                  return (
+                    <li
+                      key={product.id}
+                      className="grid grid-cols-[3.5rem_minmax(0,1fr)_auto] items-center gap-4 px-4 py-2.5 md:grid-cols-[3.5rem_minmax(0,1fr)_9rem_5rem_8rem]"
+                    >
+                      <ProductThumb src={product.images[0]} name={product.name} />
+
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{product.name}</p>
+                        <p className="truncate text-xs text-ink/55">
+                          {product.category} · {product.collection}
+                        </p>
+                        <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink/60 md:hidden">
+                          <span className="tabular-nums">
+                            {onSale
+                              ? formatPrice(product.discountPrice ?? 0)
+                              : formatPrice(product.originalPrice)}
+                          </span>
+                          <span aria-hidden="true">·</span>
+                          <span>{product.available ? stockLabel : 'Sold out'}</span>
+                          {onSale ? (
+                            <span className="badge badge-sale">Sale</span>
+                          ) : null}
+                          {product.isNewArrival ? (
+                            <span className="text-choc">New</span>
+                          ) : null}
+                        </p>
+                      </div>
+
+                      <div className="hidden text-sm tabular-nums md:block">
+                        {onSale ? (
+                          <>
+                            <span className="text-ink/45 line-through">
+                              {formatPrice(product.originalPrice)}
+                            </span>{' '}
+                            <span className="font-medium">
+                              {formatPrice(product.discountPrice ?? 0)}
+                            </span>
+                          </>
+                        ) : (
+                          <span>{formatPrice(product.originalPrice)}</span>
+                        )}
+                      </div>
+
+                      <div className="hidden text-sm md:block">
+                        {!product.available ? (
+                          <span className="msg-err">Sold out</span>
+                        ) : (
+                          <span className="tabular-nums text-ink/70">
+                            {stockLabel}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setEditor({ mode: 'edit', product })}
+                          className="grid h-9 w-9 place-items-center border border-ink/15 text-ink/70 transition-colors hover:border-ink hover:bg-ink hover:text-cream"
+                          aria-label={`Edit ${product.name}`}
+                        >
+                          <Pencil className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void removeProduct(product)}
+                          disabled={deletingId === product.id}
+                          className="grid h-9 w-9 place-items-center border border-ink/15 text-ink/60 transition-colors hover:border-choc hover:bg-choc hover:text-white disabled:opacity-50"
+                          aria-label={`Delete ${product.name}`}
+                        >
+                          {deletingId === product.id ? (
+                            <Loader2
+                              className="h-4 w-4 animate-spin"
+                              aria-hidden="true"
+                            />
+                          ) : (
+                            <Trash2 className="h-4 w-4" aria-hidden="true" />
+                          )}
+                        </button>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            ) : (
+              <div className="px-6 py-14 text-center">
+                <Package
+                  className="mx-auto h-8 w-8 text-ink/30"
+                  aria-hidden="true"
+                />
+                <p className="mt-3 font-serif text-2xl">No products found</p>
+                <p className="mt-1 text-sm text-ink/60">
+                  {search
+                    ? 'Try a different search.'
+                    : 'Add your first product to get started.'}
+                </p>
+              </div>
+            )}
+
+            {pageCount > 1 ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ink/10 px-4 py-3">
+                <span className="text-xs text-ink/60">
+                  Showing {pageStart + 1}–
+                  {Math.min(pageStart + PAGE_SIZE, filteredProducts.length)} of{' '}
+                  {filteredProducts.length}
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPage(Math.max(1, currentPage - 1))}
+                    disabled={currentPage === 1}
+                    className="border border-ink/20 px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] transition-colors hover:bg-ink hover:text-cream disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPage(Math.min(pageCount, currentPage + 1))
+                    }
+                    disabled={currentPage === pageCount}
+                    className="border border-ink/20 px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] transition-colors hover:bg-ink hover:text-cream disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </section>
+      ) : (
+        <section className="mt-8" aria-labelledby="homepage-title">
+          <div>
+            <h2 id="homepage-title" className="font-serif text-3xl">
+              Homepage
+            </h2>
+            <p className="mt-1 text-sm text-ink/60">
+              Choose what appears in each storefront section.
+            </p>
+          </div>
+
+          <div className="mt-6 grid gap-5 lg:grid-cols-2">
+            <div className="border border-ink/15 p-5">
+              <div className="flex items-baseline justify-between gap-3">
+                <h3 className="font-serif text-2xl">Featured categories</h3>
+                <span className="text-xs text-ink/60">
+                  {selectedCategories.length}/5 selected
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-ink/60">
+                The five cards directly below the homepage hero.
+              </p>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                {CATEGORIES.map((category) => {
+                  const checked = selectedCategories.includes(category.name)
+                  const disabled = !checked && selectedCategories.length >= 5
+                  return (
+                    <label
+                      key={category.name}
+                      className={`flex items-center gap-3 border p-3 text-sm ${
+                        checked ? 'border-ink bg-ink/5' : 'border-ink/15'
+                      } ${
+                        disabled
+                          ? 'cursor-not-allowed opacity-40'
+                          : 'cursor-pointer'
+                      }`.trim()}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={disabled}
+                        onChange={() => toggleCategory(category.name)}
+                        className="h-4 w-4 accent-[#A83232]"
+                      />
+                      <span>{category.name}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div className="border border-ink/15 p-5">
+              <div className="flex items-baseline justify-between gap-3">
+                <h3 className="font-serif text-2xl">Featured collections</h3>
+                <span className="text-xs text-ink/60">
+                  {selectedCollections.length} selected
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-ink/60">
+                Shown in the shop&apos;s featured collections row.
+              </p>
+              <div className="mt-4 space-y-2">
+                {COLLECTIONS.map((collection) => {
+                  const checked = selectedCollections.includes(collection.name)
+                  return (
+                    <label
+                      key={collection.name}
+                      className={`flex cursor-pointer items-start gap-3 border p-3 text-sm ${
+                        checked ? 'border-ink bg-ink/5' : 'border-ink/15'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleCollection(collection.name)}
+                        className="mt-0.5 h-4 w-4 accent-[#A83232]"
+                      />
+                      <span>
+                        <span className="block font-medium">
+                          {collection.name}
+                        </span>
+                        <span className="mt-0.5 block text-xs text-ink/60">
+                          {collection.description}
+                        </span>
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-5 border border-ink/15 p-5">
             <div className="flex items-baseline justify-between gap-3">
-              <h3 className="font-serif text-2xl">Featured categories</h3>
+              <h3 className="font-serif text-2xl">Best-selling products</h3>
               <span className="text-xs text-ink/60">
-                {selectedCategories.length}/5 selected
+                {selectedBestSellers.length}/8 selected
               </span>
             </div>
             <p className="mt-1 text-xs text-ink/60">
-              These are the five cards in the new row directly below the homepage
-              hero.
+              These get the Best Seller badge. The first four appear on the
+              homepage.
             </p>
-            <div className="mt-4 grid gap-2 sm:grid-cols-2">
-              {CATEGORIES.map((category) => {
-                const checked = selectedCategories.includes(category.name)
-                const disabled = !checked && selectedCategories.length >= 5
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {products.map((product) => {
+                const checked = selectedBestSellers.includes(product.id)
+                const disabled = !checked && selectedBestSellers.length >= 8
                 return (
                   <label
-                    key={category.name}
+                    key={product.id}
                     className={`flex items-center gap-3 border p-3 text-sm ${
                       checked ? 'border-ink bg-ink/5' : 'border-ink/15'
-                    } ${disabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'}`.trim()}
+                    } ${
+                      disabled
+                        ? 'cursor-not-allowed opacity-40'
+                        : 'cursor-pointer'
+                    }`.trim()}
                   >
                     <input
                       type="checkbox"
                       checked={checked}
                       disabled={disabled}
-                      onChange={() => toggleCategory(category.name)}
+                      onChange={() => toggleBestSeller(product.id)}
                       className="h-4 w-4 accent-[#A83232]"
                     />
-                    <span>{category.name}</span>
+                    <span className="truncate">{product.name}</span>
                   </label>
                 )
               })}
             </div>
           </div>
 
-          <div className="border border-ink/15 p-5">
-            <div className="flex items-baseline justify-between gap-3">
-              <h3 className="font-serif text-2xl">Featured collections</h3>
-              <span className="text-xs text-ink/60">
-                {selectedCollections.length} selected
-              </span>
-            </div>
+          <div className="mt-5 border border-ink/15 p-5">
+            <h3 className="font-serif text-2xl">Product labels</h3>
             <p className="mt-1 text-xs text-ink/60">
-              Shown in the shop&apos;s featured collections row. Choose 3–5 (all
-              available collections are listed).
+              Assign products to additional merchandising groups. Each group can
+              contain up to eight products.
             </p>
-            <div className="mt-4 space-y-2">
-              {COLLECTIONS.map((collection) => {
-                const checked = selectedCollections.includes(collection.name)
-                return (
-                  <label
-                    key={collection.name}
-                    className={`flex cursor-pointer items-start gap-3 border p-3 text-sm ${
-                      checked ? 'border-ink bg-ink/5' : 'border-ink/15'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleCollection(collection.name)}
-                      className="mt-0.5 h-4 w-4 accent-[#A83232]"
-                    />
-                    <span>
-                      <span className="block font-medium">{collection.name}</span>
-                      <span className="mt-0.5 block text-xs text-ink/60">
-                        {collection.description}
-                      </span>
+            <div className="mt-4 grid gap-5 lg:grid-cols-3">
+              {[
+                {
+                  title: 'Top recommended',
+                  values: selectedTopRecommended,
+                  setter: setSelectedTopRecommended,
+                },
+                {
+                  title: 'Featured products',
+                  values: selectedFeaturedProducts,
+                  setter: setSelectedFeaturedProducts,
+                },
+                {
+                  title: 'New arrivals',
+                  values: selectedNewArrivals,
+                  setter: setSelectedNewArrivals,
+                },
+              ].map((group) => (
+                <div key={group.title}>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <h4 className="text-xs font-semibold uppercase tracking-[0.12em]">
+                      {group.title}
+                    </h4>
+                    <span className="text-xs text-ink/60">
+                      {group.values.length}/8
                     </span>
-                  </label>
-                )
-              })}
+                  </div>
+                  <div className="mt-2 space-y-2">
+                    {products.map((product) => {
+                      const checked = group.values.includes(product.id)
+                      const disabled = !checked && group.values.length >= 8
+                      return (
+                        <label
+                          key={`${group.title}-${product.id}`}
+                          className={`flex items-center gap-2 border p-2 text-sm ${
+                            checked ? 'border-ink bg-ink/5' : 'border-ink/15'
+                          } ${
+                            disabled
+                              ? 'cursor-not-allowed opacity-40'
+                              : 'cursor-pointer'
+                          }`.trim()}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={disabled}
+                            onChange={() =>
+                              toggleProductGroup(product.id, group.setter)
+                            }
+                            className="h-4 w-4 accent-[#A83232]"
+                          />
+                          <span className="truncate">{product.name}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-        </div>
 
-        <div className="mt-6 border border-ink/15 p-5">
-          <div className="flex items-baseline justify-between gap-3">
-            <h3 className="font-serif text-2xl">Best-selling products</h3>
-            <span className="text-xs text-ink/60">
-              {selectedBestSellers.length}/8 selected
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              className="btn btn-dark"
+              onClick={saveSelectionChanges}
+            >
+              <Save className="h-4 w-4" aria-hidden="true" /> Save selections
+            </button>
+            <button
+              type="button"
+              className="btn btn-light"
+              onClick={resetSelectionChanges}
+            >
+              <RefreshCw className="h-4 w-4" aria-hidden="true" /> Reset selections
+            </button>
+            <span
+              role="status"
+              aria-live="polite"
+              className={`text-sm ${selectionNotice.kind}`.trim()}
+            >
+              {selectionNotice.text}
             </span>
           </div>
-          <p className="mt-1 text-xs text-ink/60">
-            These get the Best Seller badge and feed the shop row. The first four
-            selected appear in the homepage Best Selling row; select four for a
-            full row.
-          </p>
-          <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {products.map((product) => {
-              const checked = selectedBestSellers.includes(product.id)
-              const disabled = !checked && selectedBestSellers.length >= 8
-              return (
-                <label
-                  key={product.id}
-                  className={`flex items-center gap-3 border p-3 text-sm ${
-                    checked ? 'border-ink bg-ink/5' : 'border-ink/15'
-                  } ${disabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'}`.trim()}
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    disabled={disabled}
-                    onChange={() => toggleBestSeller(product.id)}
-                    className="h-4 w-4 accent-[#A83232]"
-                  />
-                  <span>
-                    <span className="block font-medium">{product.name}</span>
-                    <span className="block text-xs text-ink/60">{product.id}</span>
-                  </span>
-                </label>
-              )
-            })}
-          </div>
-        </div>
+        </section>
+      )}
 
-        <div className="mt-6 border border-ink/15 p-5">
-          <h3 className="font-serif text-2xl">Product labels</h3>
-          <p className="mt-1 text-xs text-ink/60">
-            Assign products to additional merchandising groups. Each group can
-            contain up to eight products and a product may belong to multiple groups.
-          </p>
-          <div className="mt-4 grid gap-5 lg:grid-cols-3">
-            {[
-              {
-                title: 'Top recommended',
-                values: selectedTopRecommended,
-                setter: setSelectedTopRecommended,
-              },
-              {
-                title: 'Featured products',
-                values: selectedFeaturedProducts,
-                setter: setSelectedFeaturedProducts,
-              },
-              {
-                title: 'New arrivals',
-                values: selectedNewArrivals,
-                setter: setSelectedNewArrivals,
-              },
-            ].map((group) => (
-              <div key={group.title}>
-                <div className="flex items-baseline justify-between gap-2">
-                  <h4 className="text-sm font-semibold uppercase tracking-[0.12em]">
-                    {group.title}
-                  </h4>
-                  <span className="text-xs text-ink/60">
-                    {group.values.length}/8
-                  </span>
-                </div>
-                <div className="mt-2 space-y-2">
-                  {products.map((product) => {
-                    const checked = group.values.includes(product.id)
-                    const disabled = !checked && group.values.length >= 8
-                    return (
-                      <label
-                        key={`${group.title}-${product.id}`}
-                        className={`flex items-center gap-2 border p-2 text-sm ${
-                          checked ? 'border-ink bg-ink/5' : 'border-ink/15'
-                        } ${disabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'}`.trim()}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          disabled={disabled}
-                          onChange={() => toggleProductGroup(product.id, group.setter)}
-                          className="h-4 w-4 accent-[#A83232]"
-                        />
-                        <span className="truncate">{product.name}</span>
-                      </label>
-                    )
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="mt-6 flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            className="btn btn-dark"
-            onClick={saveSelectionChanges}
-          >
-            <Save className="h-4 w-4" aria-hidden="true" /> Save selections
-          </button>
-          <button
-            type="button"
-            className="btn btn-light"
-            onClick={resetSelectionChanges}
-          >
-            <RefreshCw className="h-4 w-4" aria-hidden="true" /> Reset selections
-          </button>
-          <span role="status" className={`text-sm ${selectionNotice.kind}`.trim()}>
-            {selectionNotice.text}
-          </span>
-        </div>
-      </section>
-
-      {/* IMAGES */}
-      <section className="mt-20" aria-labelledby="images-title">
-        <h2 id="images-title" className="font-serif text-4xl">
-          3. Product photos
-        </h2>
-        <p className="mt-3 max-w-3xl text-ink/70">
-          Add photos from your device or point to a file already in{' '}
-          <code>public/assets</code>. The first photo is the product card image; use{' '}
-          <strong>Cover</strong> to change it.
-        </p>
-        <p className="mt-3 max-w-3xl border-l-2 border-choc pl-4 text-sm text-ink/70">
-          Device uploads go to Supabase Storage and appear for every visitor. You
-          can also point to an existing file in <code>public/assets</code>.
-        </p>
-
-        <div className="mt-8 space-y-6">
-          {products.map((product) => {
-            const notice = imageNotices[product.id] || EMPTY_NOTICE
-            const customImages = Boolean(overrides.images[product.id])
-            return (
-              <div key={product.id} className="border border-ink/15 p-5 lg:p-6">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h3 className="font-serif text-2xl">
-                      {product.name}{' '}
-                      <span className="text-sm text-ink/60">{product.id}</span>
-                    </h3>
-                    <p className="mt-1 text-xs text-ink/60">
-                      {product.images.length} photo
-                      {product.images.length === 1 ? '' : 's'}
-                      {customImages ? ' · edited in admin' : ' · catalogue defaults'}
-                    </p>
-                  </div>
-                  {customImages ? (
-                    <button
-                      type="button"
-                      onClick={() => resetImages(product)}
-                      className="link-line text-xs text-ink/70"
-                    >
-                      Reset this product's photos
-                    </button>
-                  ) : null}
-                </div>
-
-                <div className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-6">
-                  {product.images.map((src, index) => (
-                    <div key={`${product.id}-${index}-${src.slice(0, 32)}`}>
-                      <div className="relative">
-                        <AdminPhoto src={src} />
-                        {index === 0 ? (
-                          <span className="badge badge-best absolute left-2 top-2">
-                            Cover
-                          </span>
-                        ) : null}
-                        {src.startsWith('data:') ? (
-                          <span className="badge badge-new absolute bottom-2 left-2">
-                            Local
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className="mt-1.5 flex items-center justify-between gap-2 text-xs">
-                        <button
-                          type="button"
-                          onClick={() => makeCover(product, index)}
-                          disabled={index === 0}
-                          className={`inline-flex items-center gap-1 ${
-                            index === 0 ? 'text-ink/30' : 'link-line text-ink/70'
-                          }`}
-                        >
-                          <Star className="h-3 w-3" aria-hidden="true" /> Cover
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => removeImage(product, index)}
-                          className="inline-flex items-center gap-1 text-ink/60 hover:text-choc"
-                        >
-                          <Trash2 className="h-3 w-3" aria-hidden="true" /> Remove
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-4 grid gap-3 sm:grid-cols-[auto_1fr_auto] sm:items-center">
-                  <label
-                    htmlFor={`upload-${product.id}`}
-                    className="btn btn-light cursor-pointer"
-                  >
-                    <Upload className="h-4 w-4" aria-hidden="true" />
-                    {busyId === product.id ? 'Adding...' : 'Add photos'}
-                  </label>
-                  <input
-                    id={`upload-${product.id}`}
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    className="hidden"
-                    disabled={busyId === product.id}
-                    onChange={(event) => {
-                      void addFiles(product, event.target.files)
-                      event.target.value = ''
-                    }}
-                  />
-
-                  <div className="flex gap-2">
-                    <label htmlFor={`path-${product.id}`} className="sr-only">
-                      Image path or URL for {product.name}
-                    </label>
-                    <input
-                      id={`path-${product.id}`}
-                      type="text"
-                      className="input flex-1"
-                      placeholder="assets/products/... or https://..."
-                      value={pathValues[product.id] || ''}
-                      onChange={(event) =>
-                        setPathValues((current) => ({
-                          ...current,
-                          [product.id]: event.target.value,
-                        }))
-                      }
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') {
-                          event.preventDefault()
-                          addImagePath(product)
-                        }
-                      }}
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-light px-4"
-                      onClick={() => addImagePath(product)}
-                    >
-                      <ImagePlus className="h-4 w-4" aria-hidden="true" /> Add path
-                    </button>
-                  </div>
-                </div>
-
-                <p
-                  role="status"
-                  className={`mt-3 min-h-[1.25rem] text-sm ${
-                    notice.kind
-                  }`.trim()}
-                >
-                  {notice.text}
-                </p>
-              </div>
-            )
-          })}
-        </div>
-      </section>
-
-      {/* STORAGE */}
-      <section className="mt-20" aria-labelledby="storage-title">
-        <h2 id="storage-title" className="font-serif text-4xl">
-          4. Storage &amp; backup
-        </h2>
-        <p className="mt-3 max-w-2xl text-ink/70">
-          Admin changes are saved to Supabase as the live storefront data, with a
-          local copy for fast loading (about <strong>{storageKb} KB</strong>{' '}
-          currently). Every browser reads the Supabase copy, so changes appear
-          everywhere. The local copy alone is not enough to update other visitors.
-        </p>
-        {storageBytes > STORAGE_WARNING_BYTES ? (
-          <p className="msg-err mt-3 max-w-2xl text-sm">
-            Storage is getting full. Prefer image paths over device uploads.
-          </p>
-        ) : null}
-
-        <div className="mt-6 flex flex-wrap gap-3">
-          <button type="button" className="btn btn-light" onClick={downloadBackup}>
-            <Download className="h-4 w-4" aria-hidden="true" /> Download changes
-          </button>
-          <button type="button" className="btn btn-light" onClick={resetEverything}>
-            <RefreshCw className="h-4 w-4" aria-hidden="true" /> Reset all changes
-          </button>
-        </div>
-      </section>
+      {editor ? (
+        <ProductEditor
+          key={`${editor.mode}-${editor.product.id}`}
+          product={editor.product}
+          mode={editor.mode}
+          onClose={closeEditor}
+          onSave={saveProduct}
+        />
+      ) : null}
     </main>
   )
 }
@@ -1343,7 +1666,7 @@ export default function ManagePage() {
   if (!authReady) {
     return (
       <main id="main" className="mx-auto max-w-md px-5 py-24 text-center">
-        <p className="font-serif text-3xl">Checking admin session...</p>
+        <p className="font-serif text-3xl">Checking admin session…</p>
       </main>
     )
   }
@@ -1351,7 +1674,7 @@ export default function ManagePage() {
   if (signedIn && !productsReady) {
     return (
       <main id="main" className="mx-auto max-w-md px-5 py-24 text-center">
-        <p className="font-serif text-3xl">Loading products...</p>
+        <p className="font-serif text-3xl">Loading products…</p>
       </main>
     )
   }

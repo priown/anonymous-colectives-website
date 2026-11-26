@@ -52,9 +52,7 @@ export const signInAdmin = async (
   password: string,
 ): Promise<void> => {
   if (!supabase) {
-    throw new Error(
-      'Could not reach the login service. Please check the Supabase configuration and try again.',
-    )
+    throw new Error('Could not reach the login service. Please try again.')
   }
 
   const name = username.trim()
@@ -229,7 +227,7 @@ export const saveProducts = async (products: Product[]): Promise<void> => {
     if (error.message.toLowerCase().includes('incorrect')) {
       throw new Error('Your login is no longer valid. Please sign in again.')
     }
-    throw new Error('Could not save products. Please try again.')
+    throw new Error('Could not save your products. Please try again.')
   }
 }
 
@@ -292,9 +290,7 @@ export const publishStorefront = async (
   overrides: CatalogueOverrides,
 ): Promise<CatalogueOverrides> => {
   if (!supabase) {
-    throw new Error(
-      'Could not reach the live storefront. Please check the Supabase configuration.',
-    )
+    throw new Error('Could not reach the live storefront. Please try again.')
   }
 
   const credentials = session()
