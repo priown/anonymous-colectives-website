@@ -62,6 +62,9 @@ export default function ProductCard({
           {product.isBestSeller ? (
             <span className="badge badge-best">Best Seller</span>
           ) : null}
+          {product.isTopRecommended ? (
+            <span className="badge badge-top">Top Recommended</span>
+          ) : null}
         </div>
       </div>
 
