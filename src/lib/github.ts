@@ -19,7 +19,7 @@ export const GITHUB = {
 const TOKEN_KEY = 'ac:github-token'
 const LOGIN_KEY = 'ac:github-login'
 const API = 'https://api.github.com'
-const RAW = `https://raw.githubusercontent.com/${GITHUB.owner}/${GITHUB.repo}/${GITHUB.branch}`
+const RAW = `https://raw.githubusercontent.com/${GITHUB.owner}/${GITHUB.repo}/refs/heads/${GITHUB.branch}`
 
 export const githubToken = (): string => {
   try {
