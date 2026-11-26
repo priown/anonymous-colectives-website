@@ -34,6 +34,9 @@ export type CatalogueContextValue = {
   newArrivals: string[]
   featuredCategories: string[]
   publishState: PublishState
+  productsReady: boolean
+  saveProductList: (products: Product[]) => Promise<boolean>
+  deleteProductById: (id: string) => Promise<boolean>
   savePrices: (prices: Record<string, PriceOverride>) => boolean
   setProductImages: (id: string, images: string[]) => boolean
   saveSelections: (selections: HomepageSelections) => boolean

@@ -36,6 +36,8 @@ export type ProductSeed = {
 export type Product = ProductSeed & {
   originalPrice: number
   discountPrice: number | null
+  quantity?: number
+  sortOrder?: number
 }
 
 /** Old price = normal price. Sale = what the customer pays now (null = no sale). */

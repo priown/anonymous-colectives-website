@@ -233,6 +233,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     resetProductImages,
     resetAll,
     publishNow,
+    saveProductList,
   } = useCatalogue()
 
 
@@ -262,6 +263,8 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const [imageNotices, setImageNotices] = useState<Record<string, Notice>>({})
   const [pathValues, setPathValues] = useState<Record<string, string>>({})
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [stockNotice, setStockNotice] = useState<Notice>(EMPTY_NOTICE)
+  const [stockValues, setStockValues] = useState<Record<string, string>>({})
 
   const data = useMemo(
     () =>
@@ -459,6 +462,23 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
         kind: 'msg-err',
       })
     }
+  }
+
+  const saveStock = async () => {
+    const next = products.map((product) => ({
+      ...product,
+      quantity: Math.max(
+        0,
+        Number(stockValues[product.id] ?? product.quantity ?? 0) || 0,
+      ),
+    }))
+    const ok = await saveProductList(next)
+    setStockNotice({
+      text: ok
+        ? 'Stock saved for every visitor.'
+        : 'Could not save stock. Check your connection and try again.',
+      kind: ok ? 'msg-ok' : 'msg-err',
+    })
   }
 
   const resetSelectionChanges = () => {
@@ -847,6 +867,56 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
             {copyNotice.text}
           </p>
         </details>
+      </section>
+
+      {/* STOCK */}
+      <section className="mt-16" aria-labelledby="stock-title">
+        <h2 id="stock-title" className="font-serif text-4xl">
+          Stock
+        </h2>
+        <p className="mt-3 max-w-2xl text-ink/70">
+          Quantity is stored in the products table. Set a product to 0 when it is
+          out of stock.
+        </p>
+        <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {products.map((product) => (
+            <label
+              key={product.id}
+              className="flex items-center justify-between gap-3 border border-ink/15 p-3 text-sm"
+            >
+              <span className="min-w-0">
+                <span className="block truncate font-medium">{product.name}</span>
+                <span className="block text-xs text-ink/60">{product.id}</span>
+              </span>
+              <input
+                type="number"
+                min={0}
+                inputMode="numeric"
+                className="input w-24"
+                value={stockValues[product.id] ?? String(product.quantity ?? 0)}
+                onChange={(event) =>
+                  setStockValues((current) => ({
+                    ...current,
+                    [product.id]: event.target.value,
+                  }))
+                }
+                aria-label={`Stock quantity for ${product.name}`}
+              />
+            </label>
+          ))}
+        </div>
+        <div className="mt-6 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            className="btn btn-dark"
+            onClick={() => void saveStock()}
+          >
+            <Save className="h-4 w-4" aria-hidden="true" /> Save stock
+          </button>
+          <span role="status" className={`text-sm ${stockNotice.kind}`.trim()}>
+            {stockNotice.text}
+          </span>
+        </div>
       </section>
 
       {/* HOMEPAGE SELECTIONS */}
@@ -1240,6 +1310,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
 }
 
 export default function ManagePage() {
+  const { productsReady } = useCatalogue()
   const [signedIn, setSignedIn] = useState(false)
   const [authReady, setAuthReady] = useState(false)
 
@@ -1273,6 +1344,14 @@ export default function ManagePage() {
     return (
       <main id="main" className="mx-auto max-w-md px-5 py-24 text-center">
         <p className="font-serif text-3xl">Checking admin session...</p>
+      </main>
+    )
+  }
+
+  if (signedIn && !productsReady) {
+    return (
+      <main id="main" className="mx-auto max-w-md px-5 py-24 text-center">
+        <p className="font-serif text-3xl">Loading products...</p>
       </main>
     )
   }

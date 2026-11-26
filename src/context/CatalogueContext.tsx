@@ -21,9 +21,13 @@ import {
   type PublishState,
 } from './catalogue'
 import {
+  deleteProduct as deleteProductRow,
+  fetchProducts,
   fetchStorefrontOverrides,
   isSupabaseConfigured,
   publishStorefront,
+  saveProducts as saveProductRows,
+  watchProducts,
   watchStorefront,
 } from '../lib/supabase'
 
@@ -174,6 +178,8 @@ const applyOverrides = (overrides: CatalogueOverrides): Product[] =>
 
 export function CatalogueProvider({ children }: { children: ReactNode }) {
   const [overrides, setOverrides] = useState<CatalogueOverrides>(loadOverrides)
+  const [dbProducts, setDbProducts] = useState<Product[] | null>(null)
+  const [productsReady, setProductsReady] = useState(false)
   const [publishState, setPublishState] = useState<PublishState>(() =>
     isSupabaseConfigured
       ? { status: 'idle', message: 'Connected to the live storefront.' }
@@ -186,7 +192,10 @@ export function CatalogueProvider({ children }: { children: ReactNode }) {
   const overridesRef = useRef(overrides)
   const publishChain = useRef<Promise<unknown>>(Promise.resolve())
   const revisionRef = useRef(0)
-  const products = useMemo(() => applyOverrides(overrides), [overrides])
+  const products = useMemo(
+    () => dbProducts ?? applyOverrides(overrides),
+    [dbProducts, overrides],
+  )
 
   useEffect(() => {
     overridesRef.current = overrides
@@ -330,59 +339,222 @@ export function CatalogueProvider({ children }: { children: ReactNode }) {
     [runPublish],
   )
 
+  // Products come from the database (Cloudinary image URLs) with live refresh.
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      const rows = await fetchProducts()
+      if (cancelled) return
+      if (rows) setDbProducts(rows)
+      setProductsReady(true)
+    }
+    void load()
+    const unsubscribe = watchProducts(() => {
+      void load()
+    })
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
+  }, [])
+
+  const persistProductList = useCallback(
+    async (list: Product[]): Promise<boolean> => {
+      if (!isSupabaseConfigured) {
+        setPublishState({
+          status: 'local',
+          message: 'Connect Supabase to save products for every visitor.',
+        })
+        return false
+      }
+      setPublishState({ status: 'publishing', message: 'Saving products...' })
+      try {
+        await saveProductRows(list)
+        const refreshed = await fetchProducts()
+        setDbProducts(refreshed ?? list)
+        setPublishState({
+          status: 'success',
+          message: 'Products saved. Every visitor now sees them.',
+        })
+        return true
+      } catch (error) {
+        setPublishState({
+          status: 'error',
+          message:
+            error instanceof Error
+              ? error.message
+              : 'Could not save products to Supabase.',
+        })
+        return false
+      }
+    },
+    [],
+  )
+
+  const saveProductList = useCallback(
+    (list: Product[]) => persistProductList(list),
+    [persistProductList],
+  )
+
+  const deleteProductById = useCallback(async (id: string): Promise<boolean> => {
+    if (!isSupabaseConfigured) return false
+    try {
+      await deleteProductRow(id)
+      setDbProducts((current) =>
+        current ? current.filter((product) => product.id !== id) : current,
+      )
+      return true
+    } catch {
+      return false
+    }
+  }, [])
+
   const savePrices = useCallback(
-    (prices: Record<string, PriceOverride>) =>
-      commit({ ...overridesRef.current, prices }),
-    [commit],
+    (prices: Record<string, PriceOverride>) => {
+      if (dbProducts) {
+        const next = dbProducts.map((product) => {
+          const price = prices[product.id]
+          if (!price) return product
+          return {
+            ...product,
+            originalPrice: price.old,
+            discountPrice:
+              price.sale && price.sale < price.old ? price.sale : null,
+          }
+        })
+        setDbProducts(next)
+        void persistProductList(next)
+        return true
+      }
+      return commit({ ...overridesRef.current, prices })
+    },
+    [commit, dbProducts, persistProductList],
   )
 
   const setProductImages = useCallback(
-    (id: string, images: string[]) =>
-      commit({
+    (id: string, images: string[]) => {
+      if (dbProducts) {
+        const next = dbProducts.map((product) =>
+          product.id === id ? { ...product, images } : product,
+        )
+        setDbProducts(next)
+        void persistProductList(next)
+        return true
+      }
+      return commit({
         ...overridesRef.current,
         images: { ...overridesRef.current.images, [id]: images },
-      }),
-    [commit],
+      })
+    },
+    [commit, dbProducts, persistProductList],
   )
 
   const saveSelections = useCallback(
-    (selections: HomepageSelections) =>
-      commit({ ...overridesRef.current, ...selections }),
-    [commit],
+    (selections: HomepageSelections) => {
+      if (dbProducts) {
+        const next = dbProducts.map((product) => ({
+          ...product,
+          isBestSeller: selections.bestSellers.includes(product.id),
+          isTopRecommended: selections.topRecommended.includes(product.id),
+          isFeatured: selections.featuredProducts.includes(product.id),
+          isNewArrival: selections.newArrivals.includes(product.id),
+        }))
+        setDbProducts(next)
+        void persistProductList(next)
+      }
+      // Homepage collection/category choices still live in the storefront row.
+      return commit({
+        ...overridesRef.current,
+        featuredCollections: selections.featuredCollections,
+        featuredCategories: selections.featuredCategories,
+      })
+    },
+    [commit, dbProducts, persistProductList],
   )
 
-  const resetPrices = useCallback(
-    () => commit({ ...overridesRef.current, prices: {} }),
-    [commit],
-  )
+  const resetPrices = useCallback(() => {
+    if (dbProducts) {
+      const next = dbProducts.map((product) => {
+        const base = BASE_PRODUCTS.find((item) => item.id === product.id)
+        return base
+          ? {
+              ...product,
+              originalPrice: base.originalPrice,
+              discountPrice: base.discountPrice,
+            }
+          : product
+      })
+      setDbProducts(next)
+      void persistProductList(next)
+      return true
+    }
+    return commit({ ...overridesRef.current, prices: {} })
+  }, [commit, dbProducts, persistProductList])
 
   const resetProductImages = useCallback(
     (id: string) => {
+      if (dbProducts) {
+        const next = dbProducts.map((product) => {
+          if (product.id !== id) return product
+          const base = BASE_PRODUCTS.find((item) => item.id === id)
+          return base ? { ...product, images: base.images } : product
+        })
+        setDbProducts(next)
+        void persistProductList(next)
+        return true
+      }
       const images = { ...overridesRef.current.images }
       delete images[id]
       return commit({ ...overridesRef.current, images })
     },
-    [commit],
+    [commit, dbProducts, persistProductList],
   )
 
-  const resetAll = useCallback(() => commit(DEFAULTS), [commit])
+  const resetAll = useCallback(() => {
+    if (dbProducts) {
+      setDbProducts(BASE_PRODUCTS)
+      void persistProductList(BASE_PRODUCTS)
+    }
+    return commit(DEFAULTS)
+  }, [commit, dbProducts, persistProductList])
 
   const publishNow = useCallback(async (): Promise<boolean> => {
+    let productsOk = true
+    if (dbProducts) productsOk = await persistProductList(dbProducts)
     await publishChain.current.catch(() => undefined)
     const revision = ++revisionRef.current
-    return runPublish(overridesRef.current, revision)
-  }, [runPublish])
+    const settingsOk = await runPublish(overridesRef.current, revision)
+    return productsOk && settingsOk
+  }, [dbProducts, persistProductList, runPublish])
+
+  const bestSellers = dbProducts
+    ? dbProducts.filter((product) => product.isBestSeller).map((product) => product.id)
+    : overrides.bestSellers
+  const topRecommended = dbProducts
+    ? dbProducts
+        .filter((product) => product.isTopRecommended)
+        .map((product) => product.id)
+    : overrides.topRecommended
+  const featuredProducts = dbProducts
+    ? dbProducts.filter((product) => product.isFeatured).map((product) => product.id)
+    : overrides.featuredProducts
+  const newArrivals = dbProducts
+    ? dbProducts.filter((product) => product.isNewArrival).map((product) => product.id)
+    : overrides.newArrivals
 
   const value: CatalogueContextValue = {
     products,
     overrides,
     featuredCollections: overrides.featuredCollections,
-    bestSellers: overrides.bestSellers,
-    topRecommended: overrides.topRecommended,
-    featuredProducts: overrides.featuredProducts,
-    newArrivals: overrides.newArrivals,
+    bestSellers,
+    topRecommended,
+    featuredProducts,
+    newArrivals,
     featuredCategories: overrides.featuredCategories,
     publishState,
+    productsReady,
+    saveProductList,
+    deleteProductById,
     savePrices,
     setProductImages,
     saveSelections,

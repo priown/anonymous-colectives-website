@@ -1,4 +1,19 @@
-import { jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import {
+  boolean,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from 'drizzle-orm/pg-core'
+
+export type ProductColour = {
+  name: string
+  hex: string
+  image?: string
+  preview?: boolean
+}
 
 /**
  * Application users. Supabase Auth is not used.
@@ -13,6 +28,37 @@ export const users = pgTable('users', {
   username: text('username').notNull().unique(),
   passwordHash: text('password_hash').notNull(),
   role: text('role').notNull().default('admin'),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+})
+
+/** Full product catalogue. Public read; writes go through the checked RPCs. */
+export const products = pgTable('products', {
+  id: text('id').primaryKey(),
+  title: text('title').notNull(),
+  category: text('category').notNull(),
+  gender: text('gender').notNull(),
+  description: text('description').notNull(),
+  motto: text('motto'),
+  pictures: jsonb('pictures').$type<string[]>().notNull().default([]),
+  colours: jsonb('colours').$type<ProductColour[]>().notNull().default([]),
+  sizes: jsonb('sizes').$type<string[]>().notNull().default([]),
+  actualPrice: integer('actual_price').notNull(),
+  discountPrice: integer('discount_price'),
+  quantity: integer('quantity').notNull().default(0),
+  available: boolean('available').notNull().default(true),
+  availabilityNote: text('availability_note'),
+  isNewArrival: boolean('is_new_arrival').notNull().default(false),
+  isBestSeller: boolean('is_best_seller').notNull().default(false),
+  isFeatured: boolean('is_featured').notNull().default(false),
+  isTopRecommended: boolean('is_top_recommended').notNull().default(false),
+  collection: text('collection').notNull(),
+  dateAdded: text('date_added').notNull(),
+  sortOrder: integer('sort_order').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),

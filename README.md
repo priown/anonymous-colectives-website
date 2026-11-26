@@ -108,13 +108,16 @@ Once signed in, admin can:
 
 Every admin save is stored in Supabase:
 
-- Live data lives in the single `storefront` row.
-- Uploaded photos go to **Cloudinary** and the URLs are stored in the data row.
+- Products live in the **`products`** table. Price, photo, stock and
+  best-seller/top-recommended/featured/new-arrival changes are written back to
+  the product rows.
+- Homepage choices (featured collections/categories) live in the single
+  `storefront` row.
+- Uploaded photos go to **Cloudinary** and the URLs are stored on the product.
 - Supabase Realtime updates open browsers, and every new page load fetches the
   same data, so changes appear on every device and browser.
 - A local copy is kept in `localStorage` for fast loading and offline fallback.
-- `public/data/store.json` is the bundled seed/fallback (and is copied into
-  Supabase the first time you press **Publish current data**).
+- `public/data/store.json` is the bundled seed/fallback.
 
 ---
 
@@ -140,6 +143,23 @@ The current seed prices, photos and homepage selections are in
 Product photos live in **`public/assets/products/`**, model photos in
 `public/assets/models/`, banners in `public/assets/banners/` and logos in
 `public/assets/logo/`. Keep the paths in `catalogue.ts` in sync with the files.
+
+### Products, Cloudinary and seeding
+
+The live catalogue is the Supabase `products` table. It stores every field the
+storefront uses: title, category, gender, description, motto, pictures, colours,
+sizes, actual/discount price, quantity, availability, all merchandising flags,
+collection, date added and sort order.
+
+To upload the bundled images and seed the products:
+
+```bash
+npm run cloudinary:upload   # uploads public/assets images and writes scripts/cloudinary-map.json
+npm run db:seed             # upserts products with Cloudinary URLs
+```
+
+`npm run cloudinary:upload` uses the unsigned Cloudinary preset from
+`VITE_CLOUDINARY_UPLOAD_PRESET`. Re-running skips already-mapped files.
 
 If a product photo is missing, the site shows the placeholder and a
 “Mockup coming soon” badge instead of breaking. Featured cards without a real
