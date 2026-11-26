@@ -45,7 +45,11 @@ export const signInAdmin = async (
   username: string,
   password: string,
 ): Promise<void> => {
-  if (!supabase) throw new Error('The admin backend is not configured yet.')
+  if (!supabase) {
+    throw new Error(
+      'Could not reach the login service. Please check the Supabase configuration and try again.',
+    )
+  }
   if (username.trim() !== ADMIN_USERNAME) {
     throw new Error('Incorrect username or password.')
   }
@@ -55,14 +59,25 @@ export const signInAdmin = async (
     password,
   })
   if (error) {
-    throw new Error(
-      error.message === 'Invalid login credentials'
-        ? 'Incorrect username or password.'
-        : error.message,
-    )
+    throw new Error(friendlyAuthError(error.message))
   }
 
   await syncAdminProfile(username)
+}
+
+/** Turn Supabase auth error codes into clear prompts for the login screen. */
+const friendlyAuthError = (message: string): string => {
+  const lower = message.toLowerCase()
+  if (lower.includes('invalid login credentials')) {
+    return 'Incorrect username or password.'
+  }
+  if (lower.includes('email not confirmed')) {
+    return 'This admin account has not been confirmed yet. Confirm it in Supabase Auth.'
+  }
+  if (lower.includes('rate limit') || lower.includes('too many')) {
+    return 'Too many sign-in attempts. Wait a moment and try again.'
+  }
+  return 'Could not sign in. Check your username and password and try again.'
 }
 
 /** Create or refresh the admin's profile row in the public `users` table. */

@@ -128,6 +128,16 @@ function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError('')
+
+    if (!username.trim()) {
+      setError('Enter your username.')
+      return
+    }
+    if (!password) {
+      setError('Enter your password.')
+      return
+    }
+
     setBusy(true)
     try {
       await signInAdmin(username, password)
