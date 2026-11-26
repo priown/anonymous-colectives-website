@@ -1,0 +1,64 @@
+{
+  "prices": {
+    "ac-001": {
+      "old": 15000,
+      "sale": 13000
+    },
+    "ac-002": {
+      "old": 15000,
+      "sale": 13000
+    },
+    "ac-003": {
+      "old": 15000,
+      "sale": 12000
+    },
+    "ac-005": {
+      "old": 30000,
+      "sale": 25000
+    },
+    "ac-006": {
+      "old": 30000,
+      "sale": 25000
+    },
+    "ac-007": {
+      "old": 12000,
+      "sale": 10000
+    },
+    "ac-008": {
+      "old": 12000,
+      "sale": 10000
+    }
+  },
+  "images": {
+    "ac-006": [
+      "https://raw.githubusercontent.com/priown/anonymous-collectives-website/main/public/assets/admin/9f938615ee805550cf63d324ee2c0cdb.jpg"
+    ],
+    "ac-005": [
+      "https://raw.githubusercontent.com/priown/anonymous-collectives-website/main/public/assets/admin/0fd4b35aa28bf20b21feec5f58bb787f.jpg",
+      "https://raw.githubusercontent.com/priown/anonymous-collectives-website/main/public/assets/admin/48ebc8db6b3eca687d262b83d87f4373.jpg"
+    ],
+    "ac-003": [
+      "assets/products/beanie/black.jpg",
+      "assets/products/beanie/ash.jpg",
+      "assets/products/beanie/purple.jpg"
+    ]
+  },
+  "featuredCollections": [
+    "Essentials",
+    "Headwear",
+    "Stay Low Series"
+  ],
+  "bestSellers": [
+    "ac-005",
+    "ac-006",
+    "ac-002",
+    "ac-007"
+  ],
+  "featuredCategories": [
+    "Male Tank Tops",
+    "Female Tank Tops",
+    "T-Shirts",
+    "Sleeveless Shirts",
+    "Beanie Caps"
+  ]
+}

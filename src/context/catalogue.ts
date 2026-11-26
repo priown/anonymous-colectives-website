@@ -14,18 +14,27 @@ export type CatalogueOverrides = {
   images: Record<string, string[]>
 } & HomepageSelections
 
+export type PublishStatus = 'idle' | 'local' | 'publishing' | 'success' | 'error'
+
+export type PublishState = {
+  status: PublishStatus
+  message: string
+}
+
 export type CatalogueContextValue = {
   products: Product[]
   overrides: CatalogueOverrides
   featuredCollections: string[]
   bestSellers: string[]
   featuredCategories: string[]
+  publishState: PublishState
   savePrices: (prices: Record<string, PriceOverride>) => boolean
   setProductImages: (id: string, images: string[]) => boolean
   saveSelections: (selections: HomepageSelections) => boolean
   resetPrices: () => boolean
   resetProductImages: (id: string) => boolean
   resetAll: () => boolean
+  publishNow: () => Promise<boolean>
 }
 
 export const CatalogueContext = createContext<CatalogueContextValue | null>(null)

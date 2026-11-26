@@ -29,6 +29,15 @@ import {
   signInAdmin,
   signOutAdmin,
 } from '../lib/admin'
+import {
+  GITHUB,
+  clearGithubSession,
+  githubLogin,
+  githubToken,
+  saveGithubSession,
+  uploadImageToGithub,
+  validateGithubToken,
+} from '../lib/github'
 import { formatPrice } from '../lib/shop'
 import SmartImage from '../components/SmartImage'
 
@@ -105,28 +114,49 @@ function AdminPhoto({ src }: { src: string }) {
 function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [token, setToken] = useState('')
   const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    setError('')
+
     if (!adminCredentialsMatch(username, password)) {
       setError('Incorrect username or password.')
       return
     }
-    signInAdmin()
-    setError('')
-    onSuccess()
+    if (!token.trim()) {
+      setError('Paste a GitHub token so changes can be published.')
+      return
+    }
+
+    setBusy(true)
+    try {
+      const login = await validateGithubToken(token.trim())
+      saveGithubSession(token.trim(), login)
+      signInAdmin()
+      onSuccess()
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Could not connect to GitHub with that token.',
+      )
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
-    <main id="main" className="mx-auto flex max-w-md flex-col px-5 py-20 lg:py-28">
+    <main id="main" className="mx-auto flex max-w-lg flex-col px-5 py-20 lg:py-28">
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ink/60">
         Private page
       </p>
       <h1 className="mt-3 font-serif text-5xl lg:text-6xl">Admin access</h1>
       <p className="mt-4 text-ink/70">
-        Sign in to edit prices and product photos. This page is not linked from the
-        public site.
+        Sign in to edit the live shop. Every save is committed to GitHub, so the
+        changes appear on every device and browser.
       </p>
 
       <form onSubmit={submit} className="mt-10 space-y-5 border border-ink/20 p-6">
@@ -159,18 +189,52 @@ function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
           />
         </div>
 
+        <div>
+          <label htmlFor="admin-token" className="mb-2 block text-sm font-medium">
+            GitHub token
+          </label>
+          <input
+            id="admin-token"
+            type="password"
+            autoComplete="off"
+            spellCheck={false}
+            className="input"
+            placeholder="github_pat_..."
+            value={token}
+            onChange={(event) => setToken(event.target.value)}
+          />
+          <p className="mt-2 text-xs leading-relaxed text-ink/60">
+            Fine-grained token for{' '}
+            <strong>
+              {GITHUB.owner}/{GITHUB.repo}
+            </strong>{' '}
+            with <strong>Contents: Read and write</strong>.{' '}
+            <a
+              href="https://github.com/settings/personal-access-tokens/new"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="link-line text-ink"
+            >
+              Create a token
+            </a>
+            .
+          </p>
+        </div>
+
         <p role="alert" className="msg-err min-h-[1.25rem] text-sm">
           {error}
         </p>
 
-        <button type="submit" className="btn btn-dark w-full">
-          <LogIn className="h-4 w-4" aria-hidden="true" /> Log in
+        <button type="submit" className="btn btn-dark w-full" disabled={busy}>
+          <LogIn className="h-4 w-4" aria-hidden="true" />
+          {busy ? 'Connecting to GitHub...' : 'Log in'}
         </button>
       </form>
 
       <p className="mt-5 text-xs leading-relaxed text-ink/60">
-        Changes made here are saved in this browser. On a static site this login is
-        a convenience gate, not server-side security.
+        Your token stays in this browser tab and is only used to write to your
+        repository. Keep it private. The Admin/Admin login is a convenience gate;
+        the GitHub token is what authorizes changes.
       </p>
     </main>
   )
@@ -183,13 +247,18 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     featuredCollections,
     bestSellers,
     featuredCategories,
+    publishState,
     savePrices,
     setProductImages,
     saveSelections,
     resetPrices,
     resetProductImages,
     resetAll,
+    publishNow,
   } = useCatalogue()
+
+  const githubUser = githubLogin()
+  const tokenPresent = Boolean(githubToken())
 
   const [rows, setRows] = useState<PriceRow[]>(() => buildRows(products))
   const [priceNotice, setPriceNotice] = useState<Notice>(EMPTY_NOTICE)
@@ -410,31 +479,64 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
 
   const addFiles = async (product: Product, files: FileList | null) => {
     if (!files || !files.length) return
-    setBusyId(product.id)
-    setImageNotice(product.id, 'Processing photos...', 'msg-info')
 
-    const accepted: string[] = []
+    const token = githubToken()
+    if (!token) {
+      setImageNotice(
+        product.id,
+        'Log out and sign in with a GitHub token before uploading photos.',
+        'msg-err',
+      )
+      return
+    }
+
+    setBusyId(product.id)
+    setImageNotice(product.id, 'Uploading photos to GitHub...', 'msg-info')
+
+    const compressed: string[] = []
     for (const file of Array.from(files)) {
       if (!file.type.startsWith('image/')) continue
       try {
-        accepted.push(await compressImage(file))
+        compressed.push(await compressImage(file))
       } catch {
         /* skip unreadable file */
       }
     }
 
-    if (!accepted.length) {
+    if (!compressed.length) {
       setImageNotice(product.id, 'No readable image files were selected.', 'msg-err')
       setBusyId(null)
       return
     }
 
-    const ok = setProductImages(product.id, [...product.images, ...accepted])
+    const uploaded: string[] = []
+    let failed = 0
+    for (const dataUrl of compressed) {
+      try {
+        uploaded.push(await uploadImageToGithub(token, dataUrl))
+      } catch {
+        failed += 1
+      }
+    }
+
+    if (!uploaded.length) {
+      setImageNotice(
+        product.id,
+        'Could not upload the photos to GitHub. Check that your token still has Contents: Read and write access.',
+        'msg-err',
+      )
+      setBusyId(null)
+      return
+    }
+
+    const ok = setProductImages(product.id, [...product.images, ...uploaded])
     setImageNotice(
       product.id,
       ok
-        ? `${accepted.length} photo${accepted.length === 1 ? '' : 's'} added to this product.`
-        : 'Could not save these photos. Browser storage is full; remove an upload or add a file path instead.',
+        ? `${uploaded.length} photo${uploaded.length === 1 ? '' : 's'} uploaded and added${
+            failed ? ` (${failed} failed)` : ''
+          }. Publishing product data...`
+        : 'Could not save the new photo list.',
       ok ? 'msg-ok' : 'msg-err',
     )
     setBusyId(null)
@@ -521,7 +623,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const resetEverything = () => {
     if (
       !window.confirm(
-        'Reset every admin change (prices, photos and homepage selections)? This cannot be undone.',
+        'Reset every admin change? This also resets the live website for all visitors. This cannot be undone.',
       )
     )
       return
@@ -539,6 +641,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   }
 
   const logout = () => {
+    clearGithubSession()
     signOutAdmin()
     onLogout()
   }
@@ -563,10 +666,62 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
       </div>
 
       <p className="mt-4 max-w-3xl text-ink/70">
-        Edit prices and product photos below. Saved changes apply across the shop in
-        this browser immediately. Use the copy/download options to keep a backup or
-        publish changes in the source files.
+        Edit prices, photos and homepage selections below. Saves are committed to
+        GitHub, so the live site updates for every visitor on every device.
       </p>
+
+      <div className="mt-6 border border-ink/15 bg-sand/40 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium">
+              GitHub:{' '}
+              {githubUser ? (
+                <a
+                  href={`https://github.com/${githubUser}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="link-line"
+                >
+                  @{githubUser}
+                </a>
+              ) : (
+                'not connected'
+              )}{' '}
+              <span className="font-normal text-ink/60">
+                · {GITHUB.owner}/{GITHUB.repo}
+              </span>
+            </p>
+            <p
+              role="status"
+              className={`mt-1 text-sm ${
+                publishState.status === 'error'
+                  ? 'msg-err'
+                  : publishState.status === 'success'
+                    ? 'msg-ok'
+                    : publishState.status === 'publishing'
+                      ? 'msg-info'
+                      : 'text-ink/60'
+              }`.trim()}
+            >
+              {tokenPresent
+                ? publishState.message ||
+                  'Connected. Changes publish automatically.'
+                : 'No GitHub token in this tab. Log out and sign in with a token to publish.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="btn btn-light"
+            onClick={() => void publishNow()}
+            disabled={publishState.status === 'publishing' || !tokenPresent}
+          >
+            <Upload className="h-4 w-4" aria-hidden="true" />
+            {publishState.status === 'publishing'
+              ? 'Publishing...'
+              : 'Publish current data'}
+          </button>
+        </div>
+      </div>
 
       {/* PRICES */}
       <section className="mt-16" aria-labelledby="prices-title">
@@ -860,11 +1015,9 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
           <strong>Cover</strong> to change it.
         </p>
         <p className="mt-3 max-w-3xl border-l-2 border-choc pl-4 text-sm text-ink/70">
-          Device uploads are saved in <strong>this browser only</strong>. To publish
-          them for everyone, put the files in{' '}
-          <code>public/assets/products/…</code> (or anywhere in{' '}
-          <code>public/</code>) and add the path here, or update the image list in{' '}
-          <code>src/data/catalogue.ts</code>.
+          Device uploads are committed to the repository under{' '}
+          <code>public/assets/admin/</code> and appear for every visitor. You can
+          also point to an existing file in <code>public/assets</code>.
         </p>
 
         <div className="mt-8 space-y-6">
@@ -1009,9 +1162,10 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
           4. Storage &amp; backup
         </h2>
         <p className="mt-3 max-w-2xl text-ink/70">
-          Admin changes use this browser's local storage (about{' '}
-          <strong>{storageKb} KB</strong> currently). Clearing site data or using
-          another device will not show these edits.
+          Admin changes are committed to GitHub as the live storefront data, with
+          a local copy for fast loading (about <strong>{storageKb} KB</strong>{' '}
+          currently). Every browser reads the GitHub copy, so changes appear
+          everywhere. The local copy alone is not enough to update other visitors.
         </p>
         {storageBytes > STORAGE_WARNING_BYTES ? (
           <p className="msg-err mt-3 max-w-2xl text-sm">

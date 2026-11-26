@@ -55,6 +55,14 @@ The private admin page is at **`/manage`** (not linked in the navigation).
 
 - Username: `Admin`
 - Password: `Admin`
+- GitHub token: a fine-grained token for this repository with
+  **Contents: Read and write**.
+
+Create the token at
+[github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new),
+choose only the `anonymous-colectives-website` repository, and give it
+**Contents: Read and write**. Paste it into the admin login. It is kept in
+`sessionStorage` for that browser tab only.
 
 Once signed in, admin can:
 
@@ -70,16 +78,17 @@ Once signed in, admin can:
   backup.
 - Copy a generated `PRICE_LIST` to paste into `src/data/catalogue.ts`.
 
-Admin edits are stored in the browser's `localStorage`. They apply immediately
-in that browser and survive reloads, but they are **not uploaded to a server**.
-To publish changes for every visitor, update `src/data/catalogue.ts` (prices and
-image lists) and add the real image files under `public/assets/`.
+Every admin save is committed to GitHub:
 
-> **Security note:** this is a static site, so the login is a client-side
-> convenience gate, not real authentication. The `Admin` / `Admin` credentials
-> are present in the deployed JavaScript and can be bypassed by anyone who reads
-> the code. Do not put sensitive data behind it. If you need real access control,
-> the site needs a backend or serverless auth layer.
+- Live storefront data is **`data/store.json`**.
+- Uploaded photos are committed to **`public/assets/admin/`**.
+- Every browser and device fetches `data/store.json` on page load, so changes
+  appear everywhere, not just in the admin's browser.
+- A local copy is kept in `localStorage` for fast loading and offline fallback.
+
+The GitHub token is the real authorization. The `Admin` / `Admin` credentials
+are only a convenience gate and are present in the deployed JavaScript, so do
+not rely on them alone. Never commit the token, and log out when finished.
 
 ---
 
@@ -97,6 +106,9 @@ Homepage order: hero → Featured categories → marquee → Best Selling →
 campaign banner → AC Lookbook → brand statement → newsletter. The category and
 best-seller rows are controlled from `/manage`; featured collections are
 controlled there too and appear on the shop page.
+
+The current live prices, photos and homepage selections are stored in
+**`data/store.json`**. Admin uploads live in **`public/assets/admin/`**.
 
 Product photos live in **`public/assets/products/`**, model photos in
 `public/assets/models/`, banners in `public/assets/banners/` and logos in
