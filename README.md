@@ -7,7 +7,8 @@ Manage helper page.
 Built with **React 19**, **TypeScript**, **Vite**, **React Router**,
 **Tailwind CSS v4** and **lucide-react**.
 
-Checkout is still WhatsApp-only. There is no online payment and no backend.
+Checkout is still WhatsApp-only. There is no online payment. Shop data, photo
+storage and the admin login use Supabase.
 
 ---
 
@@ -53,16 +54,37 @@ The private admin page is at **`/manage`** (not linked in the navigation).
 
 ### Admin access
 
+The admin uses **Supabase** for permanent username/password login, shared data
+and image storage. There is no GitHub token and no expiring access key.
+
+Default login, created in Supabase:
+
 - Username: `Admin`
 - Password: `Admin`
-- GitHub token: a fine-grained token for this repository with
-  **Contents: Read and write**.
 
-Create the token at
-[github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new),
-choose only the `anonymous-collectives-website` repository, and give it
-**Contents: Read and write**. Paste it into the admin login. It is kept in
-`sessionStorage` for that browser tab only.
+One-time Supabase setup:
+
+1. Create a free project at
+   [supabase.com/dashboard](https://supabase.com/dashboard).
+2. Open **SQL Editor** and run **`supabase/setup.sql`** from this repository.
+3. Go to **Authentication → Users → Add user** and create:
+   - Email: `admin@anonymous-collectives.local`
+   - Password: `Admin`
+   - Confirm the user (auto-confirm).
+4. Open **Project Settings → API** and copy:
+   - Project URL
+   - Public **anon** key
+5. Add them as `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+   - Locally: create `.env.local` (see `.env.example`).
+   - Deployed: add them under **Settings → Secrets and variables → Actions →
+     Variables**. The deploy workflow passes them to the build.
+6. Redeploy. Then open `/manage` and log in with `Admin` / `Admin`.
+7. Press **Publish current data** once to copy the current shop data from
+   `public/data/store.json` into Supabase.
+
+The anon key is safe to expose; row-level security only allows the admin email
+to write. Never put the Supabase **service-role** key in the frontend. For a real
+store, change the `Admin` password to a strong one in Supabase.
 
 Once signed in, admin can:
 
@@ -78,17 +100,15 @@ Once signed in, admin can:
   backup.
 - Copy a generated `PRICE_LIST` to paste into `src/data/catalogue.ts`.
 
-Every admin save is committed to GitHub:
+Every admin save is stored in Supabase:
 
-- Live storefront data is **`public/data/store.json`**.
-- Uploaded photos are committed to **`public/assets/admin/`**.
-- Every browser and device fetches `public/data/store.json` on page load, so changes
-  appear everywhere, not just in the admin's browser.
+- Live data lives in the single `storefront` row.
+- Uploaded photos go to the public `storefront` storage bucket.
+- Supabase Realtime updates open browsers, and every new page load fetches the
+  same data, so changes appear on every device and browser.
 - A local copy is kept in `localStorage` for fast loading and offline fallback.
-
-The GitHub token is the real authorization. The `Admin` / `Admin` credentials
-are only a convenience gate and are present in the deployed JavaScript, so do
-not rely on them alone. Never commit the token, and log out when finished.
+- `public/data/store.json` is the bundled seed/fallback (and is copied into
+  Supabase the first time you press **Publish current data**).
 
 ---
 
@@ -107,8 +127,9 @@ campaign banner → AC Lookbook → brand statement → newsletter. The category
 best-seller rows are controlled from `/manage`; featured collections are
 controlled there too and appear on the shop page.
 
-The current live prices, photos and homepage selections are stored in
-**`public/data/store.json`**. Admin uploads live in **`public/assets/admin/`**.
+The current seed prices, photos and homepage selections are in
+**`public/data/store.json`**. Once Supabase is connected, the live copy is the
+`storefront` row in Supabase, and admin uploads live in Supabase Storage.
 
 Product photos live in **`public/assets/products/`**, model photos in
 `public/assets/models/`, banners in `public/assets/banners/` and logos in
@@ -170,6 +191,8 @@ it installs dependencies, builds the app, copies `index.html` to `404.html` for
 client-side routes, and publishes `dist/`.
 
 1. In **Settings → Pages**, set **Source** to **GitHub Actions**.
-2. Push to `main` (or run the workflow manually from the Actions tab).
-3. The workflow sets the Vite base to `/<repository-name>/` automatically.
+2. In **Settings → Secrets and variables → Actions → Variables**, add
+   `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (the public anon key).
+3. Push to `main` (or run the workflow manually from the Actions tab).
+4. The workflow sets the Vite base to `/<repository-name>/` automatically.
    If you use a custom domain, change `VITE_BASE` in the workflow to `/`.

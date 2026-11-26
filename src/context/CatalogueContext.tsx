@@ -21,10 +21,11 @@ import {
   type PublishState,
 } from './catalogue'
 import {
-  fetchRemoteOverrides,
-  githubToken,
-  publishOverrides,
-} from '../lib/github'
+  fetchStorefrontOverrides,
+  isSupabaseConfigured,
+  publishStorefront,
+  watchStorefront,
+} from '../lib/supabase'
 
 const STORAGE_KEY = 'ac:catalogue'
 
@@ -143,9 +144,13 @@ const applyOverrides = (overrides: CatalogueOverrides): Product[] =>
 export function CatalogueProvider({ children }: { children: ReactNode }) {
   const [overrides, setOverrides] = useState<CatalogueOverrides>(loadOverrides)
   const [publishState, setPublishState] = useState<PublishState>(() =>
-    githubToken()
-      ? { status: 'idle', message: 'Connected. Changes publish automatically.' }
-      : { status: 'local', message: 'Saved in this browser only. Log in with a GitHub token to publish.' },
+    isSupabaseConfigured
+      ? { status: 'idle', message: 'Connected to the live storefront.' }
+      : {
+          status: 'local',
+          message:
+            'Admin backend not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (see README).',
+        },
   )
   const overridesRef = useRef(overrides)
   const publishChain = useRef<Promise<unknown>>(Promise.resolve())
@@ -167,12 +172,12 @@ export function CatalogueProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('storage', onStorage)
   }, [])
 
-  // Pull the published data from GitHub on every visit. Every browser sees it.
+  // Pull the live Supabase data (or the bundled seed) on every visit.
   useEffect(() => {
     let cancelled = false
     const revisionAtStart = revisionRef.current
 
-    fetchRemoteOverrides()
+    fetchStorefrontOverrides()
       .then((raw) => {
         if (cancelled || !raw || revisionAtStart !== revisionRef.current) return
         const next = normalizeOverrides(raw)
@@ -185,7 +190,7 @@ export function CatalogueProvider({ children }: { children: ReactNode }) {
         }
       })
       .catch(() => {
-        /* offline or GitHub unavailable: keep local defaults */
+        /* offline: keep the local cache or defaults */
       })
 
     return () => {
@@ -193,14 +198,44 @@ export function CatalogueProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  // Live updates: when the Supabase row changes, every open browser refreshes.
+  useEffect(() => {
+    if (!isSupabaseConfigured) return
+    let cancelled = false
+
+    const unsubscribe = watchStorefront(() => {
+      void (async () => {
+        try {
+          const raw = await fetchStorefrontOverrides()
+          if (cancelled || !raw) return
+          const next = normalizeOverrides(raw)
+          overridesRef.current = next
+          setOverrides(next)
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+          } catch {
+            /* storage blocked */
+          }
+        } catch {
+          /* keep the current state */
+        }
+      })()
+    })
+
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
+  }, [])
+
   const runPublish = useCallback(
     async (next: CatalogueOverrides, revision: number): Promise<boolean> => {
-      const token = githubToken()
-      if (!token) {
+      if (!isSupabaseConfigured) {
         if (revision === revisionRef.current) {
           setPublishState({
             status: 'local',
-            message: 'Saved in this browser only. Log in with a GitHub token to publish.',
+            message:
+              'Saved in this browser only. Connect Supabase to publish to every visitor.',
           })
         }
         return false
@@ -209,17 +244,23 @@ export function CatalogueProvider({ children }: { children: ReactNode }) {
       if (revision === revisionRef.current) {
         setPublishState({
           status: 'publishing',
-          message: 'Publishing changes to the live site...',
+          message: 'Publishing changes to the live storefront...',
         })
       }
 
       try {
-        await publishOverrides(token, next)
+        const materialized = await publishStorefront(next)
         if (revision === revisionRef.current) {
+          overridesRef.current = materialized
+          setOverrides(materialized)
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(materialized))
+          } catch {
+            /* storage blocked */
+          }
           setPublishState({
             status: 'success',
-            message:
-              'Published to GitHub. The live site updates after its short deploy.',
+            message: 'Published. Every visitor now sees these changes.',
           })
         }
         return true
@@ -230,7 +271,7 @@ export function CatalogueProvider({ children }: { children: ReactNode }) {
             message:
               error instanceof Error
                 ? error.message
-                : 'Could not publish changes to GitHub.',
+                : 'Could not publish changes to Supabase.',
           })
         }
         return false

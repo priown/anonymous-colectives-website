@@ -24,19 +24,11 @@ import {
 } from '../context/catalogue'
 import { usePageMeta } from '../hooks/usePageMeta'
 import {
-  adminCredentialsMatch,
-  isAdminSignedIn,
+  isSupabaseConfigured,
   signInAdmin,
   signOutAdmin,
-} from '../lib/admin'
-import {
-  GITHUB,
-  clearGithubSession,
-  githubLogin,
-  githubToken,
-  saveGithubSession,
-  validateGithubToken,
-} from '../lib/github'
+  watchAdminAuth,
+} from '../lib/supabase'
 import { formatPrice } from '../lib/shop'
 import SmartImage from '../components/SmartImage'
 
@@ -110,37 +102,80 @@ function AdminPhoto({ src }: { src: string }) {
   )
 }
 
+function SetupScreen() {
+  return (
+    <main id="main" className="mx-auto flex max-w-2xl flex-col px-5 py-20 lg:py-28">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ink/60">
+        One-time setup
+      </p>
+      <h1 className="mt-3 font-serif text-5xl lg:text-6xl">Connect Supabase</h1>
+      <p className="mt-4 text-ink/70">
+        The admin backend is not connected yet. Supabase provides the permanent
+        username/password login, shared shop data and image storage. No GitHub
+        token is needed after this setup.
+      </p>
+
+      <ol className="mt-8 list-decimal space-y-5 pl-5 text-ink/80">
+        <li>
+          Create a free project at{' '}
+          <a
+            href="https://supabase.com/dashboard"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="link-line text-ink"
+          >
+            supabase.com/dashboard
+          </a>
+          .
+        </li>
+        <li>
+          Open the SQL Editor and run <code>supabase/setup.sql</code> from this
+          repository.
+        </li>
+        <li>
+          In Authentication → Users, add{' '}
+          <code>admin@anonymous-collectives.local</code> with password{' '}
+          <code>Admin</code> and confirm the user.
+        </li>
+        <li>
+          In Project Settings → API, copy the Project URL and the public{' '}
+          <strong>anon</strong> key.
+        </li>
+        <li>
+          Add them as <code>VITE_SUPABASE_URL</code> and{' '}
+          <code>VITE_SUPABASE_ANON_KEY</code> in{' '}
+          <code>.env.local</code> for local development and in the GitHub
+          repository Actions variables for deployment. Then redeploy.
+        </li>
+      </ol>
+
+      <p className="mt-8 text-sm text-ink/60">
+        The full checklist is in the README under “Admin access”.
+      </p>
+
+      <Link to="/" className="btn btn-light mt-10 self-start">
+        Back to the shop
+      </Link>
+    </main>
+  )
+}
+
 function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [token, setToken] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError('')
-
-    if (!adminCredentialsMatch(username, password)) {
-      setError('Incorrect username or password.')
-      return
-    }
-    if (!token.trim()) {
-      setError('Paste a GitHub token so changes can be published.')
-      return
-    }
-
     setBusy(true)
     try {
-      const login = await validateGithubToken(token.trim())
-      saveGithubSession(token.trim(), login)
-      signInAdmin()
+      await signInAdmin(username, password)
       onSuccess()
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : 'Could not connect to GitHub with that token.',
+        err instanceof Error ? err.message : 'Could not sign in to the admin.',
       )
     } finally {
       setBusy(false)
@@ -148,14 +183,14 @@ function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
   }
 
   return (
-    <main id="main" className="mx-auto flex max-w-lg flex-col px-5 py-20 lg:py-28">
+    <main id="main" className="mx-auto flex max-w-md flex-col px-5 py-20 lg:py-28">
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ink/60">
         Private page
       </p>
       <h1 className="mt-3 font-serif text-5xl lg:text-6xl">Admin access</h1>
       <p className="mt-4 text-ink/70">
-        Sign in to edit the live shop. Every save is committed to GitHub, so the
-        changes appear on every device and browser.
+        Sign in with your admin username and password. No GitHub token or expiring
+        access key is used.
       </p>
 
       <form onSubmit={submit} className="mt-10 space-y-5 border border-ink/20 p-6">
@@ -188,52 +223,19 @@ function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
           />
         </div>
 
-        <div>
-          <label htmlFor="admin-token" className="mb-2 block text-sm font-medium">
-            GitHub token
-          </label>
-          <input
-            id="admin-token"
-            type="password"
-            autoComplete="off"
-            spellCheck={false}
-            className="input"
-            placeholder="github_pat_..."
-            value={token}
-            onChange={(event) => setToken(event.target.value)}
-          />
-          <p className="mt-2 text-xs leading-relaxed text-ink/60">
-            Fine-grained token for{' '}
-            <strong>
-              {GITHUB.owner}/{GITHUB.repo}
-            </strong>{' '}
-            with <strong>Contents: Read and write</strong>.{' '}
-            <a
-              href="https://github.com/settings/personal-access-tokens/new"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="link-line text-ink"
-            >
-              Create a token
-            </a>
-            .
-          </p>
-        </div>
-
         <p role="alert" className="msg-err min-h-[1.25rem] text-sm">
           {error}
         </p>
 
         <button type="submit" className="btn btn-dark w-full" disabled={busy}>
           <LogIn className="h-4 w-4" aria-hidden="true" />
-          {busy ? 'Connecting to GitHub...' : 'Log in'}
+          {busy ? 'Signing in...' : 'Log in'}
         </button>
       </form>
 
       <p className="mt-5 text-xs leading-relaxed text-ink/60">
-        Your token stays in this browser tab and is only used to write to your
-        repository. Keep it private. The Admin/Admin login is a convenience gate;
-        the GitHub token is what authorizes changes.
+        Your password is verified by Supabase. The login session refreshes
+        automatically, so it does not expire after 30 days like a GitHub token.
       </p>
     </main>
   )
@@ -256,8 +258,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     publishNow,
   } = useCatalogue()
 
-  const githubUser = githubLogin()
-  const tokenPresent = Boolean(githubToken())
+
 
   const [rows, setRows] = useState<PriceRow[]>(() => buildRows(products))
   const [priceNotice, setPriceNotice] = useState<Notice>(EMPTY_NOTICE)
@@ -609,8 +610,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   }
 
   const logout = () => {
-    clearGithubSession()
-    signOutAdmin()
+    void signOutAdmin()
     onLogout()
   }
 
@@ -634,30 +634,16 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
       </div>
 
       <p className="mt-4 max-w-3xl text-ink/70">
-        Edit prices, photos and homepage selections below. Saves are committed to
-        GitHub, so the live site updates for every visitor on every device.
+        Edit prices, photos and homepage selections below. Saves go to the live
+        storefront database, so every visitor on every device sees them.
       </p>
 
       <div className="mt-6 border border-ink/15 bg-sand/40 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-sm font-medium">
-              GitHub:{' '}
-              {githubUser ? (
-                <a
-                  href={`https://github.com/${githubUser}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="link-line"
-                >
-                  @{githubUser}
-                </a>
-              ) : (
-                'not connected'
-              )}{' '}
-              <span className="font-normal text-ink/60">
-                · {GITHUB.owner}/{GITHUB.repo}
-              </span>
+              Live storefront{' '}
+              <span className="font-normal text-ink/60">· Supabase</span>
             </p>
             <p
               role="status"
@@ -671,17 +657,15 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                       : 'text-ink/60'
               }`.trim()}
             >
-              {tokenPresent
-                ? publishState.message ||
-                  'Connected. Changes publish automatically.'
-                : 'No GitHub token in this tab. Log out and sign in with a token to publish.'}
+              {publishState.message ||
+                'Connected. Changes publish to every visitor automatically.'}
             </p>
           </div>
           <button
             type="button"
             className="btn btn-light"
             onClick={() => void publishNow()}
-            disabled={publishState.status === 'publishing' || !tokenPresent}
+            disabled={publishState.status === 'publishing'}
           >
             <Upload className="h-4 w-4" aria-hidden="true" />
             {publishState.status === 'publishing'
@@ -983,9 +967,8 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
           <strong>Cover</strong> to change it.
         </p>
         <p className="mt-3 max-w-3xl border-l-2 border-choc pl-4 text-sm text-ink/70">
-          Device uploads are committed to the repository under{' '}
-          <code>public/assets/admin/</code> and appear for every visitor. You can
-          also point to an existing file in <code>public/assets</code>.
+          Device uploads go to Supabase Storage and appear for every visitor. You
+          can also point to an existing file in <code>public/assets</code>.
         </p>
 
         <div className="mt-8 space-y-6">
@@ -1130,9 +1113,9 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
           4. Storage &amp; backup
         </h2>
         <p className="mt-3 max-w-2xl text-ink/70">
-          Admin changes are committed to GitHub as the live storefront data, with
-          a local copy for fast loading (about <strong>{storageKb} KB</strong>{' '}
-          currently). Every browser reads the GitHub copy, so changes appear
+          Admin changes are saved to Supabase as the live storefront data, with a
+          local copy for fast loading (about <strong>{storageKb} KB</strong>{' '}
+          currently). Every browser reads the Supabase copy, so changes appear
           everywhere. The local copy alone is not enough to update other visitors.
         </p>
         {storageBytes > STORAGE_WARNING_BYTES ? (
@@ -1155,9 +1138,8 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
 }
 
 export default function ManagePage() {
-  const [signedIn, setSignedIn] = useState(
-    () => isAdminSignedIn() && Boolean(githubToken()),
-  )
+  const [signedIn, setSignedIn] = useState(false)
+  const [authReady, setAuthReady] = useState(!isSupabaseConfigured)
 
   usePageMeta({
     title: 'Admin | Anonymous Collectives',
@@ -1171,6 +1153,29 @@ export default function ManagePage() {
     document.head.appendChild(meta)
     return () => meta.remove()
   }, [])
+
+  useEffect(() => {
+    let alive = true
+    const unsubscribe = watchAdminAuth((signed) => {
+      if (!alive) return
+      setSignedIn(signed)
+      setAuthReady(true)
+    })
+    return () => {
+      alive = false
+      unsubscribe()
+    }
+  }, [])
+
+  if (!isSupabaseConfigured) return <SetupScreen />
+
+  if (!authReady) {
+    return (
+      <main id="main" className="mx-auto max-w-md px-5 py-24 text-center">
+        <p className="font-serif text-3xl">Checking admin session...</p>
+      </main>
+    )
+  }
 
   return signedIn ? (
     <AdminDashboard onLogout={() => setSignedIn(false)} />
