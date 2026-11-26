@@ -1,133 +1,163 @@
-# Anonymous Collectives website (v3)
+# Anonymous Collectives — React storefront
 
-Five public pages (Home, Shop, Product, About Us, Contact), a shopping bag, and a private helper page (`manage.html`). Built with HTML5, Tailwind CSS (CDN) and vanilla JavaScript. No backend and no build step, so it works on GitHub Pages.
+A full React conversion of the original vanilla HTML/JS site: Home, Shop,
+Product, About, Contact, a shopping cart, search, light/dark mode and the private
+Manage helper page.
 
-**Checkout = WhatsApp.** There is no online payment on this site (and none existed before). Customers add pieces to the bag, press *Checkout on WhatsApp*, and the whole order opens as a ready-written message to **+234 703 759 3930**. You confirm delivery and payment with them there.
+Built with **React 19**, **TypeScript**, **Vite**, **React Router**,
+**Tailwind CSS v4** and **lucide-react**.
+
+Checkout is still WhatsApp-only. There is no online payment and no backend.
 
 ---
 
 ## 1. Run it
 
-Open `index.html` in a browser, or use a local server:
-
 ```bash
-python3 -m http.server 8000     # then visit http://localhost:8000
-# or, with Node:  npm start
+npm install
+npm run dev
 ```
 
-No dependencies to install. You only need internet (Tailwind, fonts and icons load from CDNs). Python packages are only needed for the colour tool (section 6): `pip install -r tools/requirements.txt`.
+Then open the URL Vite prints (usually `http://localhost:5173`).
 
-## 2. Change your prices (old price and sale price)
+Useful scripts:
 
-Open **`js/products.js`**. The first thing in the file is the **PRICE LIST**:
+```bash
+npm run build     # type-check + production build into dist/
+npm run preview   # preview the production build
+npm run lint      # ESLint
+```
 
-```js
-const PRICE_LIST = {
-  "ac-001": { old: 12000, sale: null  },   // Male Tank Top      (not on sale)
-  "ac-002": { old: 12000, sale: 10000 },   // Female Tank Top    (was 12,000, now 10,000)
+---
+
+## 2. Prices
+
+Edit **`src/data/catalogue.ts`** → `PRICE_LIST`:
+
+```ts
+export const PRICE_LIST = {
+  "ac-001": { old: 17000, sale: 15000 }, // Male Tank Top
+  "ac-002": { old: 17000, sale: 15000 }, // Female Tank Top
+  "ac-003": { old: 17000, sale: 12000 }, // Slouch Beanie
   ...
 };
 ```
 
-- `old` = the normal price (shown crossed out when there is a sale).
-- `sale` = what the customer pays now. Write `null` when there is no sale.
-- Numbers only: no commas, no ₦. The "% off" is worked out automatically.
-- The bag, cards, product pages and WhatsApp messages all follow these numbers.
+- `old` is the normal price, shown crossed out when there is a sale.
+- `sale` is the price the customer pays now. Use `null` when there is no sale.
+- Numbers only — no commas or `₦`.
+- The discount percentage, cards, product pages, cart and WhatsApp message are
+  calculated from these numbers.
 
-**Prefer a form?** Open `manage.html` in your browser (it isn't linked from the site): type the old and sale prices, press *Copy price list*, then paste it over `PRICE_LIST` in `js/products.js`.
+The private admin page is at **`/manage`** (not linked in the navigation).
 
-The prices in the project are sample prices.
+### Admin access
 
-## 3. Add new photos when they're ready (no code changes)
+- Username: `Admin`
+- Password: `Admin`
 
-Every product already lists the exact file names it expects. Save a photo in that folder with that exact name and refresh: it appears on the shop, home page, product page and bag. Until then a "Mockup coming soon" tile shows, and the home page Featured Collection only shows products whose photo exists.
+Once signed in, admin can:
 
-| Product | Save the photos as |
+- Edit every product's old and sale price and save them live across the shop,
+  product pages and cart.
+- Choose the five **Featured categories** shown directly below the homepage hero.
+- Choose **3–5 Featured collections** for the shop's collection row.
+- Choose up to 8 **Best-selling products** for the shop row. The first four
+  selected fill the homepage Best Selling row.
+- Upload extra product photos from the device, add photos by file path/URL,
+  remove photos and choose the cover photo.
+- Reset prices, photos, selections or all admin changes, and download a JSON
+  backup.
+- Copy a generated `PRICE_LIST` to paste into `src/data/catalogue.ts`.
+
+Admin edits are stored in the browser's `localStorage`. They apply immediately
+in that browser and survive reloads, but they are **not uploaded to a server**.
+To publish changes for every visitor, update `src/data/catalogue.ts` (prices and
+image lists) and add the real image files under `public/assets/`.
+
+> **Security note:** this is a static site, so the login is a client-side
+> convenience gate, not real authentication. The `Admin` / `Admin` credentials
+> are present in the deployed JavaScript and can be bypassed by anyone who reads
+> the code. Do not put sensitive data behind it. If you need real access control,
+> the site needs a backend or serverless auth layer.
+
+---
+
+## 3. Products and photos
+
+All shop content lives in **`src/data/catalogue.ts`**:
+
+- `SITE` — WhatsApp number, social links, logo paths, newsletter endpoint.
+- `BANNERS` — hero and campaign banner photos.
+- `CAMPAIGNS` — AC Lookbook photos and the products worn in each shot.
+- `CATEGORIES` / `COLLECTIONS` — the category cards and shop collections.
+- `PRODUCTS` — names, descriptions, colours, sizes, stock status and photo paths.
+
+Homepage order: hero → Featured categories → marquee → Best Selling →
+campaign banner → AC Lookbook → brand statement → newsletter. The category and
+best-seller rows are controlled from `/manage`; featured collections are
+controlled there too and appear on the shop page.
+
+Product photos live in **`public/assets/products/`**, model photos in
+`public/assets/models/`, banners in `public/assets/banners/` and logos in
+`public/assets/logo/`. Keep the paths in `catalogue.ts` in sync with the files.
+
+If a product photo is missing, the site shows the placeholder and a
+“Mockup coming soon” badge instead of breaking. Featured cards without a real
+photo are hidden on the home page.
+
+---
+
+## 4. Shopping cart
+
+- Saved in the visitor’s browser under `ac:cart`, so it survives refreshes and
+  page changes.
+- One line per product + colour + size.
+- “Checkout on WhatsApp” turns the whole cart into one pre-written message to
+  `SITE.whatsappNumber`.
+
+---
+
+## 5. Theme
+
+Dark is the default. The moon/sun button switches to light mode instantly and
+remembers the choice in `localStorage` (`ac:theme`). The inline script in
+`index.html` applies the saved theme before React paints, so there is no flash.
+
+Brand colours, motion, marquee, cart drawer, dialogs and component classes are
+in **`src/index.css`**. Tailwind v4 reads the same CSS variables through its
+`@theme` block, so utilities such as `bg-cream`, `text-ink/70` and
+`border-choc` flip with the theme.
+
+---
+
+## 6. Routes
+
+| Route | Page |
 |---|---|
-| Stay Low Tee | `assets/products/t-shirts/stay-low-tee-1.jpg` (grey), `stay-low-tee-2.jpg` (black) |
-| Anonymous Tee | `assets/products/t-shirts/anonymous-tee-1.jpg` |
-| Sleeveless Shirt | `assets/products/sleeveless/sleeveless-shirt-1.jpg` |
-| Cap, Design 01 / 02 | `assets/products/caps/cap-01-1.jpg`, `cap-02-1.jpg` |
-
-`manage.html` also lists every expected photo and tells you which are **Found** or **Missing**.
-
-Tips: 4:5 portrait JPG, around 1200 to 1500 px tall, under about 250 KB. **Add more colours or photos** to a product by adding a file name to its `images` list and a colour line (below). **Add a whole product:** copy a product block in `PRODUCTS`, give it a new id, and add its prices to `PRICE_LIST`.
-
-## 4. Colours: how the colour selector works
-
-Each colour in `products.js` has its own image:
-
-```js
-{ name: "Pure White", hex: "#FFFFFF", image: "assets/products/male-tank/white.jpg", preview: true }
-```
-
-Clicking a swatch switches the product image to that file (no CSS filters anywhere), marks the swatch selected, and that exact colour + size goes into the bag and the WhatsApp message.
-
-`preview: true` marks a digitally re-coloured image (see below). The product page labels those honestly. For a real photo, leave `preview` out.
-
-## 5. Shopping bag
-
-- Header bag icon with a live item count. Items are saved in the visitor's browser, so the bag survives refreshes and page changes.
-- Each line is one variant (product + colour + size). Change quantities, remove items, clear the bag, or continue shopping.
-- *Checkout on WhatsApp* sends the whole bag. The single-item *Order via WhatsApp* button on each product page still works too.
-
-## 6. Making colour variants from a photo
-
-`tools/make_colour_variants.py` recolours only the garment of an original photo (keeping model, pose, ribbing, shadows and logo placement) and writes one JPG per colour. Dark garments keep a white logo; the pure-white garment gets a black logo.
+| `/` | Home |
+| `/shop` | Shop with URL-based filters and search (`/shop?category=Caps`) |
+| `/product/:id` | Product detail (old `/product?id=ac-001` links redirect) |
+| `/about` | About Us |
+| `/contact` | Contact + WhatsApp enquiry form |
+| `/manage` | Private admin page |
 
 ```bash
-pip install -r tools/requirements.txt
-python3 tools/make_colour_variants.py              # all products
-python3 tools/make_colour_variants.py beanie       # one product
+npm run build
 ```
 
-To add a colour, add its hex to `COLOURS` and the product's `targets`/`g` lines in `JOBS` (top of the tool), run it, then add the colour to the product in `products.js`. The untouched originals are in `assets/products/_source/`.
+For static hosting, serve `dist/` and add a SPA fallback so deep links such as
+`/product/ac-001` return `index.html`.
 
-## 7. Dark and light mode
+---
 
-Dark is the default and primary experience. The moon/sun button in the header switches instantly with a smooth transition, and the choice is remembered across pages and visits (`localStorage` key `ac:theme`). `js/theme.js` runs in each page's `<head>` before anything is painted, so there is no flash. Keep that script tag in any new page. To follow the visitor's device setting on a first visit instead, change `DEFAULT_THEME` in `js/theme.js` as described in that file.
+## 7. Deploy to GitHub Pages
 
-Palette (css/styles.css): #111111, #080808, #1C1C1C, #F5F3EF, #FFFFFF, #929292, #333333, accent #A83232.
+The repository includes `.github/workflows/deploy.yml`. On every push to `main`
+it installs dependencies, builds the app, copies `index.html` to `404.html` for
+client-side routes, and publishes `dist/`.
 
-## 8. Other things you can edit
-
-- **Homepage banners:** `assets/banners/hero-main.jpg` and `campaign-second.jpg` (paths and descriptions in `BANNERS`).
-- **AC Lookbook:** the model photos and captions in `CAMPAIGNS` (`assets/models/`). `productIds` decides which products appear when a photo is clicked. Model photos are used only here.
-- **Marquee text:** `PHRASES` in `js/home.js`.
-- **WhatsApp number, TikTok, Instagram:** `SITE` in `js/products.js`. Instagram stays hidden until you paste a real URL.
-- **Newsletter:** the form validates and shows messages, but **no email service is connected, so nothing is saved**, and the form says so. To connect one, set `SITE.newsletter.endpoint` in `js/products.js` to a URL that accepts a JSON `POST` of `{ "email": "..." }` and replies 2xx (Formspree, Buttondown, or a small serverless function). Never put API secrets in the site files.
-
-## 9. Project structure
-
-```
-index.html shop.html product.html about.html contact.html   public pages
-manage.html                      private helper: price writer + photo checker
-css/styles.css                   theme tokens, marquee, bag, components
-js/products.js                   ** prices, products, colours, lookbook, settings **
-js/theme.js  tailwind-config.js  main.js  cart.js  home.js  shop.js  product.js  contact.js  manage.js
-tools/make_colour_variants.py    colour variant generator (+ requirements.txt)
-assets/ logo/ banners/ models/ products/ (male-tank, female-tank, beanie, _source, ...)
-```
-
-## 10. Deploy to GitHub Pages
-
-1. Create a GitHub repository (e.g. `anonymous-collectives`).
-2. Upload everything in this folder (so `index.html` is at the top level), or:
-   ```bash
-   git init && git add . && git commit -m "Anonymous Collectives v3"
-   git branch -M main
-   git remote add origin https://github.com/YOUR-USERNAME/anonymous-collectives.git
-   git push -u origin main
-   ```
-3. **Settings > Pages**: Source = *Deploy from a branch*, branch **main**, folder **/ (root)**, Save.
-4. After a minute or two the site is live at `https://YOUR-USERNAME.github.io/anonymous-collectives/`. All paths are relative, so it works in that sub-folder and on a custom domain.
-5. Change the `og:image` meta tags to full URLs so link previews show a picture.
-6. `manage.html` is public once deployed (it only helps write text and check photos; it can't change the site). Delete it from the repository if you'd rather not publish it.
-
-Updating later: replace the changed files in the repository; changes go live within a couple of minutes.
-
-## 11. Custom domain
-
-1. **Settings > Pages > Custom domain**: enter it and Save.
-2. At your registrar add four **A** records for the root: `185.199.108.153`, `185.199.109.153`, `185.199.110.153`, `185.199.111.153`, and a **CNAME** for `www` pointing to `YOUR-USERNAME.github.io`.
-3. When DNS updates, tick **Enforce HTTPS**, then update the `og:image` URLs.
+1. In **Settings → Pages**, set **Source** to **GitHub Actions**.
+2. Push to `main` (or run the workflow manually from the Actions tab).
+3. The workflow sets the Vite base to `/<repository-name>/` automatically.
+   If you use a custom domain, change `VITE_BASE` in the workflow to `/`.
