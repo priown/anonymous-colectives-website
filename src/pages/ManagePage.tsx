@@ -10,6 +10,7 @@ import { Link } from 'react-router-dom'
 import {
   Download,
   ImagePlus,
+  Loader2,
   LogIn,
   LogOut,
   RefreshCw,
@@ -197,14 +198,18 @@ function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
         </p>
 
         <button type="submit" className="btn btn-dark w-full" disabled={busy}>
-          <LogIn className="h-4 w-4" aria-hidden="true" />
+          {busy ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <LogIn className="h-4 w-4" aria-hidden="true" />
+          )}
           {busy ? 'Signing in...' : 'Log in'}
         </button>
       </form>
 
       <p className="mt-5 text-xs leading-relaxed text-ink/60">
-        Your password is verified by Supabase. The login session refreshes
-        automatically, so it does not expire after 30 days like a GitHub token.
+        Your password is checked against the admin account in the database.
+        Stay signed in only on devices you trust.
       </p>
     </main>
   )

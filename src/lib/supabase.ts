@@ -2,14 +2,12 @@ import { createClient } from '@supabase/supabase-js'
 import type { CatalogueOverrides } from '../context/catalogue'
 
 /**
- * Supabase is the permanent backend for the shop data and admin login.
+ * Supabase backend for the shop data and admin login.
  *
- * - Public visitors read the single `storefront` row (no login).
- * - Admin writes are protected by Supabase Auth + row-level security.
- * - Images live in the public `storefront` storage bucket.
- *
- * Only the project URL and the public anon key belong in the browser. Never
- * put the service-role key in this app.
+ * Supabase Auth is not used. Admin passwords live as pgcrypto hashes in
+ * `public.users`; the `login` and `save_storefront` Postgres functions check
+ * them server-side. Only the project URL + public anon key are exposed here.
+ * Never put the service-role key in this app.
  */
 const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim()
 const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim()
@@ -17,29 +15,27 @@ const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim()
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey)
 
 export const supabase = isSupabaseConfigured
-  ? createClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true,
-      },
-    })
+  ? createClient(supabaseUrl, supabaseAnonKey)
   : null
 
-export const ADMIN_USERNAME = (
-  import.meta.env.VITE_ADMIN_USERNAME || 'Admin'
-).trim()
-export const ADMIN_EMAIL = (
-  import.meta.env.VITE_ADMIN_EMAIL || 'admin@anonymous-collectives.local'
-).trim()
-
 const TABLE = 'storefront'
-const BUCKET = 'storefront'
 const ROW_ID = 'main'
+const SESSION_USER = 'ac:admin-user'
+const SESSION_PASS = 'ac:admin-pass'
 
 /* -------------------------------------------------------------------------- */
-/* Auth                                                                       */
+/* Login                                                                      */
 /* -------------------------------------------------------------------------- */
+
+const session = (): { username: string; password: string } | null => {
+  try {
+    const username = sessionStorage.getItem(SESSION_USER)
+    const password = sessionStorage.getItem(SESSION_PASS)
+    return username && password ? { username, password } : null
+  } catch {
+    return null
+  }
+}
 
 export const signInAdmin = async (
   username: string,
@@ -50,75 +46,40 @@ export const signInAdmin = async (
       'Could not reach the login service. Please check the Supabase configuration and try again.',
     )
   }
-  if (username.trim() !== ADMIN_USERNAME) {
+
+  const name = username.trim()
+  const { data, error } = await supabase.rpc('login', {
+    p_username: name,
+    p_password: password,
+  })
+
+  if (error) {
+    throw new Error('Could not reach the login service. Please try again.')
+  }
+  if (!data) {
     throw new Error('Incorrect username or password.')
   }
 
-  const { error } = await supabase.auth.signInWithPassword({
-    email: ADMIN_EMAIL,
-    password,
-  })
-  if (error) {
-    throw new Error(friendlyAuthError(error.message))
+  try {
+    sessionStorage.setItem(SESSION_USER, name)
+    sessionStorage.setItem(SESSION_PASS, password)
+  } catch {
+    throw new Error('Your browser blocked the login session. Allow site storage.')
   }
-
-  await syncAdminProfile(username)
-}
-
-/** Turn Supabase auth error codes into clear prompts for the login screen. */
-const friendlyAuthError = (message: string): string => {
-  const lower = message.toLowerCase()
-  if (lower.includes('invalid login credentials')) {
-    return 'Incorrect username or password.'
-  }
-  if (lower.includes('email not confirmed')) {
-    return 'This admin account has not been confirmed yet. Confirm it in Supabase Auth.'
-  }
-  if (lower.includes('rate limit') || lower.includes('too many')) {
-    return 'Too many sign-in attempts. Wait a moment and try again.'
-  }
-  return 'Could not sign in. Check your username and password and try again.'
-}
-
-/** Create or refresh the admin's profile row in the public `users` table. */
-const syncAdminProfile = async (username: string): Promise<void> => {
-  if (!supabase) return
-  const { data } = await supabase.auth.getUser()
-  const id = data.user?.id
-  if (!id) return
-  await supabase.from('users').upsert(
-    {
-      id,
-      username,
-      role: 'admin',
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'id' },
-  )
 }
 
 export const signOutAdmin = async (): Promise<void> => {
-  if (!supabase) return
-  await supabase.auth.signOut()
+  try {
+    sessionStorage.removeItem(SESSION_USER)
+    sessionStorage.removeItem(SESSION_PASS)
+  } catch {
+    /* storage blocked */
+  }
 }
 
 export const watchAdminAuth = (callback: (signedIn: boolean) => void): (() => void) => {
-  if (!supabase) {
-    callback(false)
-    return () => undefined
-  }
-
-  const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-    callback(Boolean(session))
-  })
-
-  // Make sure the initial state is reported even on older supabase-js builds.
-  void supabase.auth
-    .getSession()
-    .then(({ data: sessionData }) => callback(Boolean(sessionData.session)))
-    .catch(() => callback(false))
-
-  return () => data.subscription.unsubscribe()
+  callback(Boolean(session()))
+  return () => undefined
 }
 
 /* -------------------------------------------------------------------------- */
@@ -175,89 +136,40 @@ export const watchStorefront = (callback: () => void): (() => void) => {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Images                                                                     */
+/* Publishing                                                                 */
 /* -------------------------------------------------------------------------- */
 
-const parseDataUrl = (dataUrl: string): { mime: string; base64: string } => {
-  const match = /^data:([^;,]+);base64,(.*)$/s.exec(dataUrl)
-  if (!match) throw new Error('Unsupported image format.')
-  return { mime: match[1], base64: match[2] }
-}
-
-const bytesFromBase64 = (base64: string): Uint8Array =>
-  Uint8Array.from(atob(base64), (char) => char.charCodeAt(0))
-
-const sha256 = async (bytes: Uint8Array): Promise<string> => {
-  const buffer = new ArrayBuffer(bytes.byteLength)
-  new Uint8Array(buffer).set(bytes)
-  const digest = await crypto.subtle.digest('SHA-256', buffer)
-  return Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('')
-}
-
-const extensionFor = (mime: string): string => {
-  if (mime.includes('png')) return 'png'
-  if (mime.includes('webp')) return 'webp'
-  if (mime.includes('gif')) return 'gif'
-  return 'jpg'
-}
-
-export const uploadImage = async (dataUrl: string): Promise<string> => {
-  if (!supabase) throw new Error('The admin backend is not configured yet.')
-
-  const { mime, base64 } = parseDataUrl(dataUrl)
-  const bytes = bytesFromBase64(base64)
-  const name = `${(await sha256(bytes)).slice(0, 32)}.${extensionFor(mime)}`
-  const path = `admin/${name}`
-  const buffer = new ArrayBuffer(bytes.byteLength)
-  new Uint8Array(buffer).set(bytes)
-
-  const { error } = await supabase.storage
-    .from(BUCKET)
-    .upload(path, new Blob([buffer], { type: mime }), {
-      contentType: mime,
-      upsert: true,
-    })
-  if (error) throw new Error(error.message)
-
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(path)
-  return data.publicUrl
-}
-
-const materializeImages = async (
-  overrides: CatalogueOverrides,
-): Promise<CatalogueOverrides> => {
-  const images: Record<string, string[]> = {}
-
-  await Promise.all(
-    Object.entries(overrides.images).map(async ([id, list]) => {
-      images[id] = await Promise.all(
-        list.map((src) =>
-          src.startsWith('data:') ? uploadImage(src) : src,
-        ),
-      )
-    }),
-  )
-
-  return { ...overrides, images }
-}
-
+/**
+ * Sends the full state through the `save_storefront` function. The function
+ * re-checks the admin username/password in Postgres before writing.
+ */
 export const publishStorefront = async (
   overrides: CatalogueOverrides,
 ): Promise<CatalogueOverrides> => {
-  if (!supabase) throw new Error('The admin backend is not configured yet.')
+  if (!supabase) {
+    throw new Error(
+      'Could not reach the live storefront. Please check the Supabase configuration.',
+    )
+  }
 
-  const materialized = await materializeImages(overrides)
-  const { error } = await supabase.from(TABLE).upsert(
-    {
-      id: ROW_ID,
-      data: materialized,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'id' },
-  )
-  if (error) throw new Error(error.message)
+  const credentials = session()
+  if (!credentials) {
+    throw new Error('Your login session has expired. Please sign in again.')
+  }
 
-  return materialized
+  const { error } = await supabase.rpc('save_storefront', {
+    p_username: credentials.username,
+    p_password: credentials.password,
+    p_data: overrides,
+  })
+
+  if (error) {
+    const message = error.message.toLowerCase()
+    if (message.includes('incorrect')) {
+      throw new Error('Your login is no longer valid. Please sign in again.')
+    }
+    throw new Error('Could not save to the live storefront. Please try again.')
+  }
+
+  return overrides
 }

@@ -1,15 +1,18 @@
 -- =============================================================================
--- Anonymous Collectives — Supabase setup
+-- Anonymous Collectives — Supabase setup (no Supabase Auth)
 --
--- Run this once in the Supabase SQL Editor (or via the DB connection string)
--- AFTER `drizzle-kit push` has created the tables. It adds:
---   1. row-level security + policies for `storefront` and `users`
---   2. the public storage bucket
---   3. realtime updates for open browsers
---   4. Data API grants for the anon/authenticated roles
+-- Run after `drizzle-kit push` has created the tables. This file adds:
+--   1. RLS on `users` and `storefront`
+--   2. server-side password checks (pgcrypto)
+--   3. login + save_storefront RPCs callable with the anon key
+--   4. Data API grants and realtime
 --
--- The admin email below must match VITE_ADMIN_EMAIL (default shown).
+-- Default admin row (created/seeded separately):
+--   username: Admin
+--   password: Admin
 -- =============================================================================
+
+create extension if not exists pgcrypto;
 
 -- Live storefront state table (columns must match src/db/schema.ts).
 create table if not exists public.storefront (
@@ -18,11 +21,11 @@ create table if not exists public.storefront (
   updated_at timestamptz not null default now()
 );
 
-alter table public.storefront enable row level security;
 alter table public.users enable row level security;
+alter table public.storefront enable row level security;
 
 -- ---------------------------------------------------------------------------
--- storefront: everyone reads, only the admin writes
+-- storefront: everyone reads. Writes only happen through save_storefront().
 -- ---------------------------------------------------------------------------
 drop policy if exists "storefront public read" on public.storefront;
 create policy "storefront public read"
@@ -31,41 +34,75 @@ create policy "storefront public read"
   to public
   using (true);
 
+-- Remove any old write policies: the RPC is the only write path.
 drop policy if exists "storefront admin write" on public.storefront;
-create policy "storefront admin write"
-  on public.storefront
-  for all
-  to authenticated
-  using ((auth.jwt() ->> 'email') = 'admin@anonymous-collectives.local')
-  with check ((auth.jwt() ->> 'email') = 'admin@anonymous-collectives.local');
 
 -- ---------------------------------------------------------------------------
--- users: a signed-in user can manage only their own profile row
+-- users: private. Password hashes are never readable by anon/authenticated.
+-- The SECURITY DEFINER functions below read the table.
 -- ---------------------------------------------------------------------------
 drop policy if exists "users own profile" on public.users;
-create policy "users own profile"
-  on public.users
-  for select
-  to authenticated
-  using ((select auth.uid()) = id);
-
 drop policy if exists "users insert own profile" on public.users;
-create policy "users insert own profile"
-  on public.users
-  for insert
-  to authenticated
-  with check ((select auth.uid()) = id);
-
 drop policy if exists "users update own profile" on public.users;
-create policy "users update own profile"
-  on public.users
-  for update
-  to authenticated
-  using ((select auth.uid()) = id)
-  with check ((select auth.uid()) = id);
 
 -- ---------------------------------------------------------------------------
--- Realtime updates so open tabs refresh when the admin saves
+-- Server-side password check. Returns true/false only.
+-- ---------------------------------------------------------------------------
+create or replace function public.login(p_username text, p_password text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+begin
+  return exists (
+    select 1
+    from public.users
+    where username = p_username
+      and password_hash = crypt(p_password, password_hash)
+  );
+end;
+$$;
+
+revoke execute on function public.login(text, text) from public;
+grant execute on function public.login(text, text) to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Verify credentials, then write the single storefront row.
+-- ---------------------------------------------------------------------------
+create or replace function public.save_storefront(
+  p_username text,
+  p_password text,
+  p_data jsonb
+)
+returns void
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+begin
+  if not exists (
+    select 1
+    from public.users
+    where username = p_username
+      and password_hash = crypt(p_password, password_hash)
+  ) then
+    raise exception 'Incorrect username or password' using errcode = '28P01';
+  end if;
+
+  insert into public.storefront (id, data, updated_at)
+  values ('main', p_data, now())
+  on conflict (id) do update
+    set data = excluded.data,
+        updated_at = excluded.updated_at;
+end;
+$$;
+
+revoke execute on function public.save_storefront(text, text, jsonb) from public;
+grant execute on function public.save_storefront(text, text, jsonb) to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Realtime updates so open tabs refresh when the admin saves.
 -- ---------------------------------------------------------------------------
 do $$
 begin
@@ -75,57 +112,8 @@ exception
 end $$;
 
 -- ---------------------------------------------------------------------------
--- Public image bucket (kept for future Supabase Storage use; uploads currently
--- go to Cloudinary)
--- ---------------------------------------------------------------------------
-insert into storage.buckets (id, name, public)
-values ('storefront', 'storefront', true)
-on conflict (id) do update set public = true;
-
-drop policy if exists "storefront images public read" on storage.objects;
-create policy "storefront images public read"
-  on storage.objects
-  for select
-  using (bucket_id = 'storefront');
-
-drop policy if exists "storefront images admin insert" on storage.objects;
-create policy "storefront images admin insert"
-  on storage.objects
-  for insert
-  to authenticated
-  with check (
-    bucket_id = 'storefront'
-    and (auth.jwt() ->> 'email') = 'admin@anonymous-collectives.local'
-  );
-
-drop policy if exists "storefront images admin update" on storage.objects;
-create policy "storefront images admin update"
-  on storage.objects
-  for update
-  to authenticated
-  using (
-    bucket_id = 'storefront'
-    and (auth.jwt() ->> 'email') = 'admin@anonymous-collectives.local'
-  )
-  with check (
-    bucket_id = 'storefront'
-    and (auth.jwt() ->> 'email') = 'admin@anonymous-collectives.local'
-  );
-
-drop policy if exists "storefront images admin delete" on storage.objects;
-create policy "storefront images admin delete"
-  on storage.objects
-  for delete
-  to authenticated
-  using (
-    bucket_id = 'storefront'
-    and (auth.jwt() ->> 'email') = 'admin@anonymous-collectives.local'
-  );
-
--- ---------------------------------------------------------------------------
--- Data API access for the roles (RLS still decides which rows are visible)
+-- Data API grants. RLS still decides row visibility.
 -- ---------------------------------------------------------------------------
 grant usage on schema public to anon, authenticated;
-grant select, insert, update on public.storefront to anon, authenticated;
-revoke all on public.users from anon;
-grant select, insert, update on public.users to authenticated;
+grant select on public.storefront to anon, authenticated;
+revoke all on public.users from anon, authenticated;

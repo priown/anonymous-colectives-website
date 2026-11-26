@@ -1,31 +1,17 @@
-import {
-  jsonb,
-  pgSchema,
-  pgTable,
-  text,
-  timestamp,
-  uuid,
-} from 'drizzle-orm/pg-core'
-
-const auth = pgSchema('auth')
-const authUsers = auth.table('users', {
-  id: uuid('id').primaryKey(),
-})
+import { jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 
 /**
- * Application profile for Supabase Auth users. Passwords live in Supabase Auth;
- * this table stores application identity and role only.
+ * Application users. Supabase Auth is not used.
  *
- * Row-level security and policies are applied by `supabase/setup.sql` (run after
- * `drizzle-kit push`) because drizzle-kit push does not reliably serialize
- * policy USING/WITH CHECK expressions.
+ * `password_hash` stores a pgcrypto `crypt('password', gen_salt('bf'))` hash.
+ * The hash is never exposed through the Data API; login and storefront writes
+ * are verified server-side by the `login` and `save_storefront` functions in
+ * `supabase/setup.sql`.
  */
 export const users = pgTable('users', {
-  id: uuid('id')
-    .primaryKey()
-    .notNull()
-    .references(() => authUsers.id, { onDelete: 'cascade' }),
+  id: uuid('id').defaultRandom().primaryKey(),
   username: text('username').notNull().unique(),
+  passwordHash: text('password_hash').notNull(),
   role: text('role').notNull().default('admin'),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()

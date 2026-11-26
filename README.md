@@ -54,37 +54,43 @@ The private admin page is at **`/manage`** (not linked in the navigation).
 
 ### Admin access
 
-The admin uses **Supabase** for permanent username/password login, shared data
-and image storage. There is no GitHub token and no expiring access key.
+The admin uses **Supabase** (Postgres + the public anon key) for username/password
+login and shared data. Supabase Auth is **not** used.
 
-Default login, created in Supabase:
-
-- Username: `Admin`
-- Password: `Admin`
+- Default login: **`Admin` / `Admin`**
+- The `promise` account also exists with password `Admin`.
+- Passwords are stored as pgcrypto `crypt`/`gen_salt` hashes in `public.users`.
+- Login is verified server-side by the `login` and `save_storefront` Postgres
+  functions, so password hashes are never exposed to the browser.
 
 One-time Supabase setup:
 
 1. Create a free project at
    [supabase.com/dashboard](https://supabase.com/dashboard).
-2. Open **SQL Editor** and run **`supabase/setup.sql`** from this repository.
-3. Go to **Authentication → Users → Add user** and create:
-   - Email: `admin@anonymous-collectives.local`
-   - Password: `Admin`
-   - Confirm the user (auto-confirm).
-4. Open **Project Settings → API** and copy:
-   - Project URL
-   - Public **anon** key
-5. Add them as `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
-   - Locally: create `.env.local` (see `.env.example`).
+2. Copy **Project Settings → API → Project URL** and the public **anon** key.
+3. Add them as `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+   - Locally: create `.env` (see `.env.example`).
    - Deployed: add them under **Settings → Secrets and variables → Actions →
      Variables**. The deploy workflow passes them to the build.
-6. Redeploy. Then open `/manage` and log in with `Admin` / `Admin`.
-7. Press **Publish current data** once to copy the current shop data from
-   `public/data/store.json` into Supabase.
+4. Apply the database schema and security:
+   ```bash
+   npm run db:push
+   ```
+   Then run **`supabase/setup.sql`** in the Supabase SQL Editor (or with the
+   pooler connection string). It creates the RLS policies, RPCs and grants.
+5. Seed/reset the admin password:
+   ```sql
+   insert into public.users (username, password_hash, role)
+   values ('Admin', extensions.crypt('Admin', extensions.gen_salt('bf')), 'admin')
+   on conflict (username) do update
+     set password_hash = excluded.password_hash, updated_at = now();
+   ```
+6. Redeploy. Open `/manage`, log in, and press **Publish current data** once to
+   copy `public/data/store.json` into the live Supabase row.
 
-The anon key is safe to expose; row-level security only allows the admin email
-to write. Never put the Supabase **service-role** key in the frontend. For a real
-store, change the `Admin` password to a strong one in Supabase.
+The anon key is safe to expose. Never put the Supabase **service-role** key in
+the frontend. For a real store, change the `Admin` password to a strong one and
+consider rate-limiting login attempts.
 
 Once signed in, admin can:
 
@@ -103,7 +109,7 @@ Once signed in, admin can:
 Every admin save is stored in Supabase:
 
 - Live data lives in the single `storefront` row.
-- Uploaded photos go to the public `storefront` storage bucket.
+- Uploaded photos go to **Cloudinary** and the URLs are stored in the data row.
 - Supabase Realtime updates open browsers, and every new page load fetches the
   same data, so changes appear on every device and browser.
 - A local copy is kept in `localStorage` for fast loading and offline fallback.
