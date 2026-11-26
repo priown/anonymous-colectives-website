@@ -76,6 +76,7 @@ export default function ProductPage({ id }: ProductPageProps) {
   const info = priceInfo(product)
   const hasColours = product.colours.length > 0
   const hasSizes = product.sizes.length > 0
+  const hasMultipleImages = product.images.length > 1
   const mainImage = product.images[imageIndex]
   const previewColour = product.colours.find((c) => c.image === mainImage)
   const previewNote =
@@ -186,8 +187,12 @@ export default function ProductPage({ id }: ProductPageProps) {
 
         <div className="grid gap-10 lg:grid-cols-[1.15fr_1fr] lg:gap-16">
           {/* Gallery */}
-          <div className="grid gap-3 lg:grid-cols-[5.5rem_1fr] lg:items-start">
-            <div className="gallery-main lg:order-2">
+          <div
+            className={`grid gap-3 ${
+              hasMultipleImages ? 'lg:grid-cols-[5.5rem_1fr] lg:items-start' : ''
+            }`.trim()}
+          >
+            <div className={`gallery-main ${hasMultipleImages ? 'lg:order-2' : ''}`.trim()}>
               <SmartImage
                 key={mainImage}
                 src={mainImage}
@@ -264,7 +269,9 @@ export default function ProductPage({ id }: ProductPageProps) {
             ) : null}
 
             <p
-              className="preview-note text-xs text-ink/70 lg:order-3 lg:col-start-2"
+              className={`preview-note text-xs text-ink/70 ${
+                hasMultipleImages ? 'lg:order-3 lg:col-start-2' : ''
+              }`.trim()}
               aria-live="polite"
             >
               {previewNote}
