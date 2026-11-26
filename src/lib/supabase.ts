@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import type { CatalogueOverrides } from '../context/catalogue'
 import type { Colour, Product } from '../data/catalogue'
+import { PUBLIC_CONFIG } from './public-config'
 
 /**
  * Supabase backend for the shop data and admin login.
@@ -10,8 +11,16 @@ import type { Colour, Product } from '../data/catalogue'
  * them server-side. Only the project URL + public anon key are exposed here.
  * Never put the service-role key in this app.
  */
-const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim()
-const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim()
+const supabaseUrl = (
+  import.meta.env.VITE_SUPABASE_URL ||
+  PUBLIC_CONFIG.supabaseUrl ||
+  ''
+).trim()
+const supabaseAnonKey = (
+  import.meta.env.VITE_SUPABASE_ANON_KEY ||
+  PUBLIC_CONFIG.supabaseAnonKey ||
+  ''
+).trim()
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey)
 

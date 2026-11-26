@@ -1,5 +1,15 @@
-const cloudName = (import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || '').trim()
-const uploadPreset = (import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || '').trim()
+import { PUBLIC_CONFIG } from './public-config'
+
+const cloudName = (
+  import.meta.env.VITE_CLOUDINARY_CLOUD_NAME ||
+  PUBLIC_CONFIG.cloudinaryCloudName ||
+  ''
+).trim()
+const uploadPreset = (
+  import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET ||
+  PUBLIC_CONFIG.cloudinaryUploadPreset ||
+  ''
+).trim()
 
 export const isCloudinaryConfigured = Boolean(cloudName && uploadPreset)
 
