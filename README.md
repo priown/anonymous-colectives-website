@@ -80,9 +80,9 @@ Once signed in, admin can:
 
 Every admin save is committed to GitHub:
 
-- Live storefront data is **`data/store.json`**.
+- Live storefront data is **`public/data/store.json`**.
 - Uploaded photos are committed to **`public/assets/admin/`**.
-- Every browser and device fetches `data/store.json` on page load, so changes
+- Every browser and device fetches `public/data/store.json` on page load, so changes
   appear everywhere, not just in the admin's browser.
 - A local copy is kept in `localStorage` for fast loading and offline fallback.
 
@@ -108,7 +108,7 @@ best-seller rows are controlled from `/manage`; featured collections are
 controlled there too and appear on the shop page.
 
 The current live prices, photos and homepage selections are stored in
-**`data/store.json`**. Admin uploads live in **`public/assets/admin/`**.
+**`public/data/store.json`**. Admin uploads live in **`public/assets/admin/`**.
 
 Product photos live in **`public/assets/products/`**, model photos in
 `public/assets/models/`, banners in `public/assets/banners/` and logos in

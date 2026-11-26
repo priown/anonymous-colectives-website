@@ -214,18 +214,12 @@ export function CatalogueProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const materialized = await publishOverrides(token, next)
+        await publishOverrides(token, next)
         if (revision === revisionRef.current) {
-          overridesRef.current = materialized
-          setOverrides(materialized)
-          try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(materialized))
-          } catch {
-            /* storage blocked */
-          }
           setPublishState({
             status: 'success',
-            message: 'Published. Every visitor will see these changes.',
+            message:
+              'Published to GitHub. The live site updates after its short deploy.',
           })
         }
         return true

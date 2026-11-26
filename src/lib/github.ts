@@ -12,14 +12,15 @@ export const GITHUB = {
   owner: import.meta.env.VITE_GITHUB_OWNER || 'priown',
   repo: import.meta.env.VITE_GITHUB_REPO || 'anonymous-colectives-website',
   branch: import.meta.env.VITE_GITHUB_BRANCH || 'main',
-  dataPath: 'data/store.json',
+  dataPath: 'public/data/store.json',
   imageDir: 'public/assets/admin',
+  publicDataPath: 'data/store.json',
+  publicImageDir: 'assets/admin',
 }
 
 const TOKEN_KEY = 'ac:github-token'
 const LOGIN_KEY = 'ac:github-login'
 const API = 'https://api.github.com'
-const RAW = `https://raw.githubusercontent.com/${GITHUB.owner}/${GITHUB.repo}/refs/heads/${GITHUB.branch}`
 
 export const githubToken = (): string => {
   try {
@@ -170,9 +171,10 @@ export const validateGithubToken = async (token: string): Promise<string> => {
 /** Reads the latest published data. Returns null when the file does not exist yet. */
 export const fetchRemoteOverrides = async (): Promise<Partial<CatalogueOverrides> | null> => {
   try {
-    const response = await fetch(`${RAW}/${GITHUB.dataPath}?t=${Date.now()}`, {
-      cache: 'no-store',
-    })
+    const response = await fetch(
+      `${import.meta.env.BASE_URL}${GITHUB.publicDataPath}?t=${Date.now()}`,
+      { cache: 'no-store' },
+    )
     if (!response.ok) return null
     return (await response.json()) as Partial<CatalogueOverrides>
   } catch {
@@ -195,7 +197,7 @@ export const uploadImageToGithub = async (
     await putFile(token, path, base64, `Add storefront image ${name}`)
   }
 
-  return `${RAW}/${path}`
+  return `${GITHUB.publicImageDir}/${name}`
 }
 
 const materializeImages = async (

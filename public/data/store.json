@@ -31,11 +31,11 @@
   },
   "images": {
     "ac-006": [
-      "https://raw.githubusercontent.com/priown/anonymous-collectives-website/refs/heads/main/public/assets/admin/9f938615ee805550cf63d324ee2c0cdb.jpg"
+      "assets/admin/9f938615ee805550cf63d324ee2c0cdb.jpg"
     ],
     "ac-005": [
-      "https://raw.githubusercontent.com/priown/anonymous-collectives-website/refs/heads/main/public/assets/admin/0fd4b35aa28bf20b21feec5f58bb787f.jpg",
-      "https://raw.githubusercontent.com/priown/anonymous-collectives-website/refs/heads/main/public/assets/admin/48ebc8db6b3eca687d262b83d87f4373.jpg"
+      "assets/admin/0fd4b35aa28bf20b21feec5f58bb787f.jpg",
+      "assets/admin/48ebc8db6b3eca687d262b83d87f4373.jpg"
     ],
     "ac-003": [
       "assets/products/beanie/black.jpg",

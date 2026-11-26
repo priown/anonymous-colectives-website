@@ -35,7 +35,6 @@ import {
   githubLogin,
   githubToken,
   saveGithubSession,
-  uploadImageToGithub,
   validateGithubToken,
 } from '../lib/github'
 import { formatPrice } from '../lib/shop'
@@ -479,64 +478,33 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
 
   const addFiles = async (product: Product, files: FileList | null) => {
     if (!files || !files.length) return
-
-    const token = githubToken()
-    if (!token) {
-      setImageNotice(
-        product.id,
-        'Log out and sign in with a GitHub token before uploading photos.',
-        'msg-err',
-      )
-      return
-    }
-
     setBusyId(product.id)
-    setImageNotice(product.id, 'Uploading photos to GitHub...', 'msg-info')
+    setImageNotice(product.id, 'Processing photos...', 'msg-info')
 
-    const compressed: string[] = []
+    const accepted: string[] = []
     for (const file of Array.from(files)) {
       if (!file.type.startsWith('image/')) continue
       try {
-        compressed.push(await compressImage(file))
+        accepted.push(await compressImage(file))
       } catch {
         /* skip unreadable file */
       }
     }
 
-    if (!compressed.length) {
+    if (!accepted.length) {
       setImageNotice(product.id, 'No readable image files were selected.', 'msg-err')
       setBusyId(null)
       return
     }
 
-    const uploaded: string[] = []
-    let failed = 0
-    for (const dataUrl of compressed) {
-      try {
-        uploaded.push(await uploadImageToGithub(token, dataUrl))
-      } catch {
-        failed += 1
-      }
-    }
-
-    if (!uploaded.length) {
-      setImageNotice(
-        product.id,
-        'Could not upload the photos to GitHub. Check that your token still has Contents: Read and write access.',
-        'msg-err',
-      )
-      setBusyId(null)
-      return
-    }
-
-    const ok = setProductImages(product.id, [...product.images, ...uploaded])
+    const ok = setProductImages(product.id, [...product.images, ...accepted])
     setImageNotice(
       product.id,
       ok
-        ? `${uploaded.length} photo${uploaded.length === 1 ? '' : 's'} uploaded and added${
-            failed ? ` (${failed} failed)` : ''
-          }. Publishing product data...`
-        : 'Could not save the new photo list.',
+        ? `${accepted.length} photo${
+            accepted.length === 1 ? '' : 's'
+          } added. Publishing to the live site...`
+        : 'Could not save these photos. Browser storage may be full.',
       ok ? 'msg-ok' : 'msg-err',
     )
     setBusyId(null)
@@ -1187,7 +1155,9 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
 }
 
 export default function ManagePage() {
-  const [signedIn, setSignedIn] = useState(isAdminSignedIn)
+  const [signedIn, setSignedIn] = useState(
+    () => isAdminSignedIn() && Boolean(githubToken()),
+  )
 
   usePageMeta({
     title: 'Admin | Anonymous Collectives',
